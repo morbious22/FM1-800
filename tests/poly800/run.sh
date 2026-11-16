@@ -17,4 +17,12 @@ for set in dry phaser; do
     # 23:run, one known near-miss: its 31 Hz band, 3.1 dB against 3 (a note change's thump in a fast run)
     python3 tools/poly800_ref/compare.py tests/poly800/ref_$set.json "$OUT/$set.json" --list 5 --allow 23:run
 done
+# step 5: inside Felucca (its engine list, voice.c, fx.c); needs Felucca's generated headers (build/gen: ./build.sh)
+if [ -f build/gen/felucca_tables.h ]; then
+    cc -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -Ifirmware/bsp/chip -Ifirmware/bsp/boards/fm1 \
+        -o "$OUT/in_felucca" tests/poly800/in_felucca.c -lm
+    "$OUT/in_felucca"
+else
+    echo "(inside Felucca: skipped, no build/gen: run ./build.sh first)"
+fi
 echo "poly800: all passed"

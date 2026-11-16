@@ -44,6 +44,7 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #if FELUCCA_SLICE
 #include "eng_slice.c"
 #endif
+#include "eng_p800.c"           /* FM1-800: POLY800, the Poly-800 (p800.c) */
 #if FELUCCA_ADPCM
 #include "eng_adpcm.c"           /* ADPCM: BRR waves and an FIR echo, its DSP ported from snes_spc (adpcm_dsp.c, LGPL-2.1+) */
 #endif
@@ -73,6 +74,7 @@ static const engine_t *const ENGINES[NENGINES] = {
 #if FELUCCA_ADPCM
     &ENG_ADPCM,                  /* 14 (ENGI_ADPCM; FELUCCA_ADPCM=0 builds without it) */
 #endif
+    &ENG_P800,                   /* ENGI_P800 (FM1-800) */
 };
 
 /* a track's engine number as an index (the audio paths: a compare, cheaper than % NENGINES; a bad number: 0) */
@@ -122,6 +124,7 @@ static const char *snd_missing(const track_t *t, uint32_t *code)
  * engine indices, never DIGITAL's reserved 1 (with FELUCCA_FM4 it follows FM6). The indices stay as they are (the
  * stores and the protocol hold them); only this table orders them */
 static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
+    ENGI_P800,                   /* FM1-800: POLY800 first (PRESETS, the EDIT layer's first key) */
     0,                           /* ANALOG */
     12,                          /* FM6 */
 #if FELUCCA_FM4

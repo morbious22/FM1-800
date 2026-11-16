@@ -1067,6 +1067,7 @@ static void mix_block(int32_t *out, uint32_t n)
     for (i = 0; i < NPART; i++)                         /* (one core: as 1.6) */
         mix_part(&trk[i], n);
 #endif
+    p8e_mix(mix_l, mix_r, n);                           /* FM1-800: the Poly-800, into the dry mix (eng_p800.c) */
     if (perf)
         perf_pre(mix_l, mix_r, send_d, send_r, n);
     fx_buses(send_c, send_d, send_r, wet, n);

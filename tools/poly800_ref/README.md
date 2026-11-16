@@ -84,3 +84,19 @@ What it took, beyond the page's own numbers:
   sinc²(f / fs): -2.4 dB at 12.7 kHz); a fixed 3-tap filter on the voices puts most of it back.
 - **Fixed point at low cutoffs.** Through the filters the signal is 64 times finer (Q22), with rounding and the
   direct form's error carried to the next sample, so nothing sticks a little off zero after the last note.
+
+## Inside Felucca (step 5)
+
+`firmware/src/eng_p800.c` makes the Poly-800 one more Felucca engine, POLY800 (engine 14 in this build), so Felucca's
+screens offer it as they are: it comes first in PRESETS (its 64 programs, the names shortened to Felucca's 12
+characters) and on the EDIT layer's first key. A part on POLY800 sends its notes to the one Poly-800
+(`voice.c trk_note_on / trk_note_off`, no Felucca voice taken) and the Poly-800's stereo output joins the dry mix after
+the parts (`fx.c mix_block`), at half the mix's full scale: Felucca's output stage limits from 0.55 of full scale and
+soft-clips (tanh) everything, so the page's full scale sits under the limiter and only the loud organ chords meet it.
+Felucca's per-part LEVEL, PAN, FX sends and envelopes do not reach it (step 6 gives it its own path).
+
+`tests/poly800/in_felucca.c` (run by `run.sh` once `build/gen` exists) plays it through Felucca's own code: notes reach
+it and take no Felucca voice, its level is the page's 6 dB down (within 0.25 dB: the tanh), the 27 organ chord stays
+under full scale, the part's preset is the program that plays, and after a switch away it lets go and goes quiet.
+Felucca's UI test (`tests/ui_test.c`) passes as before: part 1 still starts on ANALOG (making it start on POLY800 broke
+32 of its checks, which press keys on part 1 and count Felucca's voices; that waits for step 7's own screens).

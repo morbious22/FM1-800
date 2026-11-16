@@ -55,6 +55,7 @@ static void felucca_init(void)
     chain_defaults(&chain_config);
     for (i = 0; i < G_COUNT; i++)
         song.g[i] = GP[i].def;
+    p800_init();                              /* FM1-800: the Poly-800 (eng_p800.c), before any note */
     undo_depth++;                             /* (no undo copy of the power-on loads) */
     fm6_init();                               /* every track's FM6 patch: the init voice */
     for (i = 0; i < NTRK; i++) {

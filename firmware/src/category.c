@@ -35,8 +35,11 @@ static const char *const PRESET_CAT[16] = {
     "FFFF",                      /* 11 NOISE: WIND, RAIN, ARCADE, METAL */
     "KUBLPUKU",                  /* 12 FM6: TINE EP, BELL, FM BASS, BRASS, PAD, MARIMBA, ORGAN, PLUCK */
     "DD",                        /* 13 SLICE: CHOP, STUTTER */
+#if FELUCCA_ADPCM
     "LLBBKKPD",                  /* 14 ADPCM: SQUARE LEAD, PULSE LEAD, SAW BASS, SUB BASS, SOFT SINE, ORGAN, ECHO PAD,
                                   * NOISE HAT */
+#endif
+    P800_CATS,                   /* ENGI_P800 (FM1-800): the Poly-800's 64 programs (p800_data.h, from their names) */
 };
 static uint32_t preset_cat(uint32_t e, uint32_t k)    /* factory preset k of engine e */
 {

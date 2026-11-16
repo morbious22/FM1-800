@@ -83,6 +83,35 @@ def main():
     o += [prog_c(g) for g in pg]
     o.append("};\n")
 
+    # ---- Felucca's PRESETS list (step 5, until FM1-800 has its own screen): the names in 12 characters, as Felucca's
+    ab = [("WITH CHIFF", "CHIFF"), ("SQUARE WAVE", "SQUARE"), ("SYNTHICHORD", "SYNCHORD"), ("ACOUSTIC", "AC"),
+          ("PERCUSSIVE", "PERC"), ("PERC.", "PERC"), ("SYNTHE", "SYN"), ("ENSEMBLE", "ENS"), ("CRESCENDO", "CRESC"),
+          ("MANUAL", "MAN"), ("REVERSE", "REV"), ("DOUBLE", "2X"), ("TONGUED", "TONG"), ("SCIENCE", "SCI"),
+          ("BRIGHT", "BRT"), ("FLUTE/BRASS", "FLT/BRS"), ("STRINGS", "STRS"), ("BRASS IN 5THS", "BRASS 5THS"),
+          ("RESONANT", "RESO"), ("BOWED", "BOW"), ("TRILLING", "TRILL"), ("CRESC", "CRES"), ("ORGAN", "ORG"),
+          ("PERC PIPE", "PRC PIPE"), ("UPPER MAN", "UPPER"), ("LOWER MAN", "LOWER")]
+    short = []
+    for g in pg:
+        n = g[1].upper()
+        for a, b in ab:
+            if len(n) > 12:
+                n = n.replace(a, b)
+        short.append(n[:12].rstrip())
+    o.append("/* Felucca's PRESETS list (step 5): the names in Felucca's 12 characters */")
+    # .. and their categories for its LIST filter (category.c letters: B L P U K D F O), from the names
+    def cat(n):
+        n = n.upper()
+        for keys, c in ((("BASS",), "B"), (("STRINGS", "CELLOS", "VIOLAS", "SWEEP", "SYNTHANELLI", "SYNTHICHORD", "ENSEMBLE",
+                                            "LAMBDA", "OB CROSS", "SYNFUL", "LUNAR"), "P"),
+                        (("PIANO", "ORGAN", "VIBES", "ACCORDION", "KEYS", "GUITAR", "HARP", "PIPE"), "K"),
+                        (("STEEL DRUMS",), "U"), (("JET", "HELICOPTER", "UFO", "BLACK HOLE", "WET ONES", "WHO ME"), "F"),
+                        (("BRASS", "LEAD", "FLUTE", "SAXO", "1999", "SYNTHE"), "L")):
+            if any(k in n for k in keys):
+                return c
+        return "O"
+    o.append('#define P800_CATS "' + "".join(cat(g[1]) for g in pg) + '"   /* category.c PRESET_CAT */')
+    o.append("#define P800_FELUCCA_PRESETS " + ", ".join('{.name = "%s"}' % n for n in short) + "\n")
+
     # ---- pitch: phase increment of cents c above note 0, octave 10 (shifted down for the octave)
     inc_c = [q(F0 / FS * 2 ** (c / 1200) * 2 ** 10, 32) for c in range(1201)]
     assert max(inc_c) < 2 ** 32
