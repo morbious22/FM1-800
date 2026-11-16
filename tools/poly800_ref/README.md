@@ -75,15 +75,16 @@ What it took, beyond the page's own numbers:
 - **Chrome's filter, not a textbook one.** The page's filter is Chrome's BiquadFilterNode, a direct-form biquad: when
   DEG 3 starts again on a key, the cutoff jumps and the old outputs it holds ring through the new coefficients, a
   burst the page has on every note of a run. A state-variable filter (smoother, and what Felucca uses) leaves the
-  bursts out, so the two low-passes are direct form; their 1 / a0 is worked to 30 bits (at 40 Hz, 15 bits moved the
-  poles enough to ring). The shelves, high-pass and phaser allpasses stay state-variable: they move slowly, and
-  match Chrome's within 0.25 dB.
+  bursts out, so every filter is direct form, as Chrome's; their 1 / a0 is worked to 30 bits (at 40 Hz, 15 bits moved
+  the poles enough to ring). Against Chrome's own impulse responses: within 0.1 dB, low-pass, high-pass, shelves and
+  allpass. (In step 5 the shelves, high-pass and allpasses were still state-variable filters: with rounded products
+  they cycled on at -58 dB in silence after some programs, and the 10 Hz high-pass held an offset at -75 dB.)
 - **Pitch in twelfths of a cent.** DCO 2's detune steps are 20/3 cents; rounded to quarter cents, the two DCOs' beating
   drifted out of step with the page's within a held note.
 - **The polyBLEP's high end.** The 2-point polyBLEP smooths each step over two samples (harmonics fall as
   sinc²(f / fs): -2.4 dB at 12.7 kHz); a fixed 3-tap filter on the voices puts most of it back.
 - **Fixed point at low cutoffs.** Through the filters the signal is 64 times finer (Q22), with rounding and the
-  direct form's error carried to the next sample, so nothing sticks a little off zero after the last note.
+  direct form's error carried to the next sample, so after the last note the output is exactly zero.
 
 ## Inside Felucca (step 5)
 
@@ -101,3 +102,7 @@ it and take no Felucca voice, its level is the page's 6 dB down (within 0.25 dB:
 under full scale, the part's preset is the program that plays, and after a switch away it lets go and goes quiet.
 Felucca's UI test (`tests/ui_test.c`) passes as before: part 1 still starts on ANALOG (making it start on POLY800 broke
 32 of its checks, which press keys on part 1 and count Felucca's voices; that waits for step 7's own screens).
+
+Felucca's own suite (`tests/run_tests.sh`, all but the tests that need the JieLi build) passes as it did on the step 4
+code. Felucca's regression renders play every POLY800 program too (`tests/golden.txt`: 64 renders added, none of
+Felucca's changed); their health check waits for the Poly-800's voices and its noise (`p800_busy`), then wants silence.

@@ -70,6 +70,10 @@ static int parts_free(void)
         for (i = 0; i < NVOICE; i++)
             if (trk[p].v[i].active)
                 return 0;
+#ifdef ENGI_P800
+    if (p800_busy())                                    /* FM1-800: POLY800's voices are the Poly-800's own */
+        return 0;
+#endif
     return 1;
 }
 

@@ -163,21 +163,22 @@ def main():
     o.append(f"#define P800_K_HP {q(10 ** (-0.7 / 20), 28)}    /* page N.hp.Q.value=.7 */")
     o.append(f"#define P800_K_AP {q(1 / 0.5, 28)}   /* page ap.Q.value=.5 (allpass: a linear Q) */")
 
-    # fixed shelves (A. Simper's SVF shelves = the RBJ shelves Chrome uses, S = 1, k = sqrt 2)
-    def svf(g, k):
-        a1 = 1 / (1 + g * (g + k))
-        return a1, g * a1, g * g * a1
-
-    k = math.sqrt(2)
-    a = 10 ** (-5 / 40)               # page N.ls lowshelf 220 Hz, -5 dB
-    a1, a2, a3 = svf(math.tan(math.pi * 220 / FS) / math.sqrt(a), k)
-    ls = [q(a1, 30), q(a2, 30), q(a3, 30), q(k * (a - 1), 28), q(a * a - 1, 28)]
-    a = 10 ** (3 / 40)                # page N.hs highshelf 6000 Hz, +3 dB
-    a1, a2, a3 = svf(math.tan(math.pi * 6000 / FS) * math.sqrt(a), k)
-    hs = [q(a1, 30), q(a2, 30), q(a3, 30), q(k * (1 - a) * a, 28), q(1 - a * a, 28), q(a * a, 28)]
-    o.append("/* shelves: a1 a2 a3 (Q30), then m1 m2 (and m0 for the high shelf), Q28 */")
-    o.append(table("P800_LS", "int32_t", ls))
-    o.append(table("P800_HS", "int32_t", hs))
+    # Chrome's own shelves, direct form (RBJ, S = 1): b0 b1 b2 a1 a2, normalised by a0, Q29
+    def shelf(f0, gain, high):
+        A = 10 ** (gain / 40)
+        w0 = 2 * math.pi * f0 / FS
+        cw, al = math.cos(w0), math.sin(w0) / 2 * math.sqrt(2)
+        sa = 2 * math.sqrt(A) * al
+        if not high:
+            b = [A * ((A + 1) - (A - 1) * cw + sa), 2 * A * ((A - 1) - (A + 1) * cw), A * ((A + 1) - (A - 1) * cw - sa)]
+            a = [(A + 1) + (A - 1) * cw + sa, -2 * ((A - 1) + (A + 1) * cw), (A + 1) + (A - 1) * cw - sa]
+        else:
+            b = [A * ((A + 1) + (A - 1) * cw + sa), -2 * A * ((A - 1) + (A + 1) * cw), A * ((A + 1) + (A - 1) * cw - sa)]
+            a = [(A + 1) - (A - 1) * cw + sa, 2 * ((A - 1) - (A + 1) * cw), (A + 1) - (A - 1) * cw - sa]
+        return [q(x / a[0], 29) for x in (b[0], b[1], b[2], a[1], a[2])]
+    o.append("/* the shelves, direct form as Chrome's (RBJ, S = 1): b0 b1 b2 a1 a2 / a0, Q29 */")
+    o.append(table("P800_LS", "int32_t", shelf(220, -5, False)))    # page N.ls lowshelf 220 Hz -5 dB
+    o.append(table("P800_HS", "int32_t", shelf(6000, 3, True)))     # page N.hs highshelf 6000 Hz +3 dB
 
     # ---- envelopes (page stage(): linear ramps; relp(): setTargetAtTime(0,t,tm(r,.01,5)/4))
     o.append("/* DEG: per-sample rates (Q30 of full scale) of the linear stages, and the release's per-block factor */")

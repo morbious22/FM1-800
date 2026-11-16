@@ -737,13 +737,13 @@ static const int32_t P800_K_LP1[16] = {
 #define P800_K_LP2 247650882   /* page N.f2.Q.value=.7 */
 #define P800_K_HP 247650882    /* page N.hp.Q.value=.7 */
 #define P800_K_AP 536870912   /* page ap.Q.value=.5 (allpass: a linear Q) */
-/* shelves: a1 a2 a3 (Q30), then m1 m2 (and m0 for the high shelf), Q28 */
+/* the shelves, direct form as Chrome's (RBJ, S = 1): b0 b1 b2 a1 a2 / a0, Q29 */
 static const int32_t P800_LS[5] = {
-    1046609184, 18943231, 342865, -94946426, -117483106
+    533445744, -1046416377, 513356247, -1046266319, 510081137
 };
 
-static const int32_t P800_HS[6] = {
-    550950757, 273597317, 135866030, -85049421, -110739704, 379175160
+static const int32_t P800_HS[5] = {
+    686982964, -642372600, 227121696, -415084727, 149945875
 };
 
 /* DEG: per-sample rates (Q30 of full scale) of the linear stages, and the release's per-block factor */

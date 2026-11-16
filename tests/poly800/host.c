@@ -110,6 +110,7 @@ int main(int argc, char **argv)
     static const uint8_t PHPROG[4] = {11, 17, 15, 33};
     FILE *idx;
     int first = 1;
+    (void)p800_busy;                              /* (Felucca's side asks it: tests/regress.c) */
     if (argc == 2 && !strcmp(argv[1], "pitch")) return pitch();
     if (argc != 3 || (strcmp(argv[2], "page") && strcmp(argv[2], "dry") && strcmp(argv[2], "phaser"))) {
         fprintf(stderr, "usage: host OUT_DIR page|dry|phaser\n");
