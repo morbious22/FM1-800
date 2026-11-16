@@ -39,6 +39,10 @@
 #define P800_NOINLINE __attribute__((noinline))
 #endif
 #define P800_BLK 32u
+#ifndef P800_POOL
+#define P800_POOL __attribute__((section(".pool")))   /* the delay lines: Felucca's pool, not its 72 KiB of fast RAM,
+                                                        * which keeps 4 KiB spare (tools/build.py) */
+#endif
 
 typedef struct { uint8_t oct, saw, foot[4], level; } p800_dco_t;
 typedef struct {
@@ -262,14 +266,14 @@ static struct {
     p800_dfs_t f1, f2;
     p800_dfs_t ls, hs, hp;
     int32_t hf1, hf2;            /* the voices' last two samples (the polyBLEP's high-end correction) */
-    int32_t ch_buf[CH_LEN];
     uint32_t ch_w, ch_ph[2];
     int32_t ch_d[2];             /* the delays at the end of the last block, Q10 samples */
     p800_dfs_t ap[2][6];
-    int32_t fb[2][FB_LEN];
     uint32_t fb_i, ph_ph;
 } p8;
 
+static int32_t p800_ch_buf[CH_LEN] P800_POOL;    /* the chorus's delay line (mono, before it) */
+static int32_t p800_fb[2][FB_LEN] P800_POOL;     /* the phaser's feedback, one Chrome block late */
 static p800_df1_t LSC, HSC;                       /* the fixed shelves (p800_data.h, Chrome's RBJ shelves) */
 
 static uint32_t p800_rand(void)
@@ -370,6 +374,8 @@ static void p800_init(void)
     uint32_t i;
     uint8_t *b = (uint8_t *)&p8;
     for (i = 0; i < sizeof p8; i++) b[i] = 0;
+    for (i = 0; i < CH_LEN; i++) p800_ch_buf[i] = 0;
+    for (i = 0; i < 2u * FB_LEN; i++) p800_fb[i / FB_LEN][i % FB_LEN] = 0;
     for (i = 0; i < P800_NSET; i++) p8.set[i] = P800_SET_DEF[i];
     p8.ready = 1;
     p8.rng = 0x2545F491u;
@@ -616,21 +622,21 @@ static void p800_render(int32_t *outl, int32_t *outr)
         x = df1_run(&chp, &p8.hp, x);            /* the high-pass (10 Hz when off) */
         x = (x + (1 << (FILT_SH - 1))) >> FILT_SH;
         /* chorus: the delay lines read between samples (linear), hard left and right */
-        p8.ch_buf[p8.ch_w & (CH_LEN - 1u)] = x;
+        p800_ch_buf[p8.ch_w & (CH_LEN - 1u)] = x;
         for (k = 0; k < 2u; k++) {
             int32_t d = chd[k] + chs[k] * (int32_t)(i + 1), di = d >> 10, fr = d & 1023;
-            int32_t a = p8.ch_buf[(p8.ch_w - (uint32_t)di) & (CH_LEN - 1u)];
-            int32_t b = p8.ch_buf[(p8.ch_w - (uint32_t)di - 1u) & (CH_LEN - 1u)];
+            int32_t a = p800_ch_buf[(p8.ch_w - (uint32_t)di) & (CH_LEN - 1u)];
+            int32_t b = p800_ch_buf[(p8.ch_w - (uint32_t)di - 1u) & (CH_LEN - 1u)];
             tap[k] = a + (((b - a) * fr) >> 10);
         }
         p8.ch_w++;
         for (k = 0; k < 2u; k++) {
             int32_t o = mulq30(og, x + mulq30(wet, tap[k]));
-            int32_t a = o + mulq30(pfb, p8.fb[k][p8.fb_i]);   /* the feedback, one Chrome block late */
+            int32_t a = o + mulq30(pfb, p800_fb[k][p8.fb_i]);   /* the feedback, one Chrome block late */
             uint32_t s;
             for (s = 0; s < nap; s++)            /* the allpasses */
                 a = df1_run(&cap[s], &p8.ap[k][s], a);
-            p8.fb[k][p8.fb_i] = a;
+            p800_fb[k][p8.fb_i] = a;
             y[k] = o + mulq30(pmix, a);
         }
         p8.fb_i = (p8.fb_i + 1u) & (FB_LEN - 1u);
