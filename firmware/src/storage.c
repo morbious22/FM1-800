@@ -12,7 +12,8 @@
  * Flash access goes through three hooks (also used by the host test):
  *   st_read(off, dst, n)   st_erase(off)   st_prog(off, src, n)
  */
-#define ST_MAGIC 0x554C4546u                   /* "FELU" */
+#define ST_MAGIC 0x30303846u                   /* "F800": FM1-800's own marker, so it never reads what Felucca
+                                                * saved ("FELU", 0x554C4546) and Felucca never reads what it saves */
 #define ST_SECTOR 4096u
 #define ST_PAYLOAD_OFF 256u
 #define ST_PAYLOAD_MAX (ST_SECTOR - ST_PAYLOAD_OFF)
