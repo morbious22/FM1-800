@@ -81,7 +81,7 @@ static const char *const N_ENGNAME[] = {"ANALOG", FELUCCA_FM4 ? "DIGITAL" : "-",
 #if FELUCCA_ADPCM
                                              "ADPCM",
 #endif
-                                             "POLY800",   /* FM1-800: ENGI_P800 */
+                                             "P-800",     /* FM1-800: ENGI_P800, POLY800 (6 characters at most: the PRESETS card) */
 };
 _Static_assert(sizeof N_ENGNAME / sizeof N_ENGNAME[0] == NENGINES, "N_ENGNAME: one name per engine (ENGINES[])");
 

@@ -88,7 +88,8 @@ What it took, beyond the page's own numbers:
 
 ## Inside Felucca (step 5)
 
-`firmware/src/eng_p800.c` makes the Poly-800 one more Felucca engine, POLY800 (engine 14 in this build), so Felucca's
+`firmware/src/eng_p800.c` makes the Poly-800 one more Felucca engine, POLY800 (engine 14 in this build; on the screen
+**P-800**: Felucca's PRESETS card holds six characters, so "POLY800" came out "POLY8…"), so Felucca's
 screens offer it as they are: it comes last in PRESETS (its 64 programs, the names shortened to Felucca's 12
 characters; PRESETS' KNOB 2 picks the engine), with no EDIT layer key, as Felucca's ADPCM (first, or with a key, it
 pushed CLEAN INIT off the keyboard in a FELUCCA_FM4 build). A part on POLY800 sends its notes to the one Poly-800

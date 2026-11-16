@@ -22,8 +22,8 @@ static void p8e_render(struct track *t, voice_t *v, int32_t *out, uint32_t n, co
 static const preset_t P8E_PRESETS[P800_NPROG] = {P800_FELUCCA_PRESETS};
 
 static const engine_t ENG_P800 = {
-    "POLY800",
-    {"POLY-800", "POLY-800"},
+    "P-800",
+    {"P-800", "P-800"},
     {{"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
      {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}},
     P8E_PRESETS,

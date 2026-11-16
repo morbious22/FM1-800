@@ -5126,7 +5126,7 @@ static int test_fm4_retired(void)
 #if FELUCCA_ADPCM
                                             "ADPCM",
 #endif
-                                            "POLY800",   /* FM1-800 */
+                                            "P-800",     /* FM1-800: POLY800 */
         };
         uint32_t last = 0xFFu, r = 0, n = 0;
         ok = NENG_SHOWN == NELEM(ORDER);
