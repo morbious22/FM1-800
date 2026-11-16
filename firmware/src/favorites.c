@@ -17,11 +17,13 @@ static uint8_t *fav_bit(uint32_t engine, uint32_t preset, uint8_t *mask)   /* th
         *mask = (uint8_t)(1u << (preset % 8u));
         return &favorites.factory[engine][preset / 8u];
     }
+#ifdef ENGI_P800                                   /* (a host test without the engine list: not there) */
     if (engine == ENGI_P800 && preset < 64u) {     /* FM1-800: POLY800's 64 programs in SLICE's row, bytes 24..31
                                                     * (SLICE has 2 presets: its byte 0 only) */
         *mask = (uint8_t)(1u << (preset % 8u));
         return &favorites.factory[13][24u + preset / 8u];
     }
+#endif
 #if FELUCCA_ADPCM
     if (engine == ENGI_ADPCM && preset < 8u) {
         *mask = (uint8_t)(1u << preset);
