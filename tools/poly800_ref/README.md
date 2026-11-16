@@ -1,6 +1,7 @@
 # Poly-800 reference sound (FM1-800 step 3)
 
-FM1-800's sound has to match the Poly-800 web prototype. These tools record that page's sound and measure it, so the
+FM1-800's sound has to match the Poly-800 web prototype (built in an earlier session from the Korg Poly-800's
+circuit diagrams, so what it copies is the circuit's design: footages summed as squares, one shared filter and DEG 3). These tools record that page's sound and measure it, so the
 firmware's sound (rendered on the computer from step 4 on) can be checked against it by numbers before anyone listens.
 
 | File | What |
