@@ -81,7 +81,9 @@ static const char *const N_ENGNAME[] = {"ANALOG", FELUCCA_FM4 ? "DIGITAL" : "-",
 #if FELUCCA_ADPCM
                                              "ADPCM",
 #endif
+                                             "POLY800",   /* FM1-800: ENGI_P800 */
 };
+_Static_assert(sizeof N_ENGNAME / sizeof N_ENGNAME[0] == NENGINES, "N_ENGNAME: one name per engine (ENGINES[])");
 
 static const char *const N_SLOT[] = {"A", "B", "C", "D", 0};   /* G_SLOT 1..4 (F_INT: the names split its range) */
 #define PD(l, f, mn, mx, df) {l, f, mn, mx, df, 0, 0}
