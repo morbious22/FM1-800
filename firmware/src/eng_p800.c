@@ -35,8 +35,10 @@ static const engine_t ENG_P800 = {
 };
 
 static uint8_t p8e_prog = 0xFFu;                 /* the program loaded, 0xFF = none yet */
-static uint16_t p8e_live;                        /* blocks to keep rendering after the last part let it go (tails) */
-#define P8E_TAIL ((uint16_t)(8u * P800_FS / P800_BLK))   /* 8 s: the longest release, 5 s x 1.5 + .1, and the phaser */
+static uint16_t p8e_live;                        /* blocks to render on once it went quiet (the filters' and the
+                                                  * phaser's ring), 0 = idle: it costs nothing */
+#define P8E_TAIL ((uint16_t)(P800_FS / P800_BLK))  /* 1 s after the last voice and the noise (p800_busy): a 40 Hz
+                                                    * resonance rings ~55 ms, the phaser's feedback ~20 ms */
 
 /* a part plays POLY800 (its notes go to the Poly-800): the engine it asked for, so a note during the switch's fade
  * already goes there (voice.c) */
@@ -49,8 +51,9 @@ static void p800_all_off(void)
 }
 
 /* once a block, after the parts (fx.c mix_block): the program of the first part playing POLY800, and its sound added
- * to the dry mix. With no part on it: its held notes let go, and it renders on for 8 s (releases, chorus, phaser
- * tail), then costs nothing */
+ * to the dry mix. With no part on it, its held notes let go. It renders while it sounds (p800_busy: a voice, its
+ * release, the noise) and 1 s after; then it rests, costing nothing, until the next note (on the FM-1 the shared
+ * filters, chorus and phaser cost ~30 % of the CPU running in silence) */
 static void p8e_mix(int32_t *l, int32_t *r, uint32_t n)
 {
     int32_t bl[P800_BLK], br[P800_BLK];
@@ -64,14 +67,14 @@ static void p8e_mix(int32_t *l, int32_t *r, uint32_t n)
             p8e_prog = on->preset;
             p800_program(p8e_prog);
         }
-        p8e_live = P8E_TAIL;
     } else if (p8.nheld) {
         p800_all_off();
     }
+    if (p800_busy())
+        p8e_live = P8E_TAIL;
     if (!p8e_live)
         return;
-    if (!on)
-        p8e_live--;
+    p8e_live--;
     for (k = 0; k + P800_BLK <= n; k += P800_BLK) {     /* (n is CTL, 32: one block) */
         p800_render(bl, br);
         for (i = 0; i < P800_BLK; i++) {

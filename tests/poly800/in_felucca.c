@@ -134,6 +134,19 @@ int main(void)
     trk_note_off(&trk[0], 60);
     ok(p8.nheld == 0, "its note-off reaches it");
 
+    init(idx12);                                  /* on P-800, no note: it rests (the shared chain costs ~30 % of the
+                                                   * FM-1 running in silence); a note wakes it */
+    {
+        int32_t o[2 * CTL];
+        uint32_t b2;
+        for (b2 = 0; b2 < 1500u; b2++) mix_block(o, CTL);
+        ok(p8e_live == 0, "with no note it rests (renders nothing) once the 1 s tail is over");
+        trk_note_on(&trk[0], 60, 100);
+        mix_block(o, CTL);
+        ok(p8e_live > 0 && p800_busy(), "a note wakes it at once");
+        trk_note_off(&trk[0], 60);
+    }
+
     init(idx27);                                  /* 27 BRIGHT PERC. ORGAN, the chord: 5.5 x full scale on the page */
     play(CHORD, 4, 1400, 700, &a, &pk);
     printf("  27 organ chord: in Felucca %.2f dB, peak %d of 32768\n", a, pk);
