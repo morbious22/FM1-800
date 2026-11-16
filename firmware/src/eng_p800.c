@@ -2,8 +2,8 @@
  * Copyright (C) 2026 morbious22 (FM1-800) */
 /* FM1-800 step 5: the Poly-800 sound (p800.c) inside Felucca, as one more engine, POLY800.
  *
- * It is an engine in name only, so Felucca's PRESETS list, EDIT layer and screens offer it as they are: its 64
- * "presets" are the Poly-800's programs. Its sound is not Felucca's: a part playing POLY800 sends its notes to the one
+ * It is an engine in name only, so Felucca's PRESETS list and screens offer it as they are: its 64 "presets" are the
+ * Poly-800's programs, last in PRESETS (engines.c ENGINE_ORDER; PRESETS' KNOB 2 picks it, no EDIT key: as ADPCM). Its sound is not Felucca's: a part playing POLY800 sends its notes to the one
  * Poly-800 (voice.c trk_note_on / trk_note_off: no Felucca voice is taken), and its stereo output joins the dry mix
  * after the parts (fx.c mix_block), so MASTER, Felucca's limiter and the USB audio take it as any part. The Poly-800
  * has its own voices, filter, chorus and phaser; Felucca's per-part LEVEL, PAN, FX sends and envelopes do not apply.

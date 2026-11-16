@@ -124,7 +124,6 @@ static const char *snd_missing(const track_t *t, uint32_t *code)
  * engine indices, never DIGITAL's reserved 1 (with FELUCCA_FM4 it follows FM6). The indices stay as they are (the
  * stores and the protocol hold them); only this table orders them */
 static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
-    ENGI_P800,                   /* FM1-800: POLY800 first (PRESETS, the EDIT layer's first key) */
     0,                           /* ANALOG */
     12,                          /* FM6 */
 #if FELUCCA_FM4
@@ -139,6 +138,8 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
 #if FELUCCA_ADPCM
     14,                          /* ADPCM (1.8): last, so the EDIT layer's white keys keep the 13 above (ui_layer.c LY_ENG_KEYS) */
 #endif
+    ENGI_P800,                   /* FM1-800: POLY800, after them all, as ADPCM: no EDIT key (INIT and CLEAN INIT stay on
+                                  * theirs; with FELUCCA_FM4 one more would push CLEAN INIT past G5) */
 };
 
 /* the engines one can pick (engine 1 only with FELUCCA_FM4), in ENGINE_ORDER: eng_ok(e), the n-th of them

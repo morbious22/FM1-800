@@ -118,9 +118,10 @@ int main(void)
         if (P800_PROGS[i].num == 27) idx27 = i;
         if (P800_PROGS[i].num == 12) idx12 = i;
     }
-    printf("POLY800 inside Felucca (engine %u, %u presets, first in PRESETS: %s)\n", ENGI_P800,
-           ENGINES[ENGI_P800]->npresets, ENGINES[ENGINE_ORDER[0]]->name);
-    ok(ENGINE_ORDER[0] == ENGI_P800 && ENGINES[ENGI_P800]->npresets == 64, "POLY800 is an engine with the 64 programs, first");
+    printf("POLY800 inside Felucca (engine %u, %u presets, last in PRESETS: %s)\n", ENGI_P800,
+           ENGINES[ENGI_P800]->npresets, ENGINES[ENGINE_ORDER[NENG_SHOWN - 1]]->name);
+    ok(ENGINE_ORDER[NENG_SHOWN - 1] == ENGI_P800 && ENGINES[ENGI_P800]->npresets == 64,
+       "POLY800 is an engine with the 64 programs, last in the list");
 
     init(idx12);                                  /* 12 ACOUSTIC PIANO, one note: quiet, no limiter */
     play(PIANO, 1, 1400, 700, &a, &pk);

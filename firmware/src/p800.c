@@ -249,6 +249,8 @@ typedef struct { int32_t x1, x2, y1, y2; int64_t e; } p800_dfs_t;
 
 static struct {
     const p800_prog_t *pg;
+    uint8_t ready;               /* p800_init has run (each entry below runs it first if not: a host that never called
+                                  * it, a test, gets the page's defaults, not a silent volume 0) */
     int16_t set[P800_NSET];
     p800_voice_t v[8];
     uint8_t held[16], nheld, last;
@@ -394,6 +396,7 @@ static void p800_init(void)
     uint8_t *b = (uint8_t *)&p8;
     for (i = 0; i < sizeof p8; i++) b[i] = 0;
     for (i = 0; i < P800_NSET; i++) p8.set[i] = P800_SET_DEF[i];
+    p8.ready = 1;
     p8.rng = 0x2545F491u;
     p8.last = 60;
     p8.pg = &P800_PROGS[0];
@@ -403,13 +406,20 @@ static void p800_init(void)
     p800_apply();
 }
 
+static void p800_ready(void)
+{
+    if (!p8.ready) p800_init();
+}
+
 static void p800_set(uint32_t id, int32_t v)
 {
+    p800_ready();
     if (id < P800_NSET) p8.set[id] = (int16_t)v;
 }
 
 static void p800_program(uint32_t idx)
 {
+    p800_ready();
     p8.pg = &P800_PROGS[idx < P800_NPROG ? idx : 0];
     p800_apply();
 }
@@ -456,9 +466,13 @@ static void snd_kill(p800_voice_t *v)            /* page kill(): what still soun
 
 static void p800_note_on(uint32_t m)
 {
-    const p800_prog_t *g = p8.pg;
-    uint32_t i, d, first = p8.nheld == 0, lim = g->mode ? 4u : 8u;
+    const p800_prog_t *g;
+    uint32_t i, d, first, lim;
     p800_voice_t *v = 0;
+    p800_ready();
+    g = p8.pg;
+    first = p8.nheld == 0;
+    lim = g->mode ? 4u : 8u;
     for (i = 0; i < p8.nheld; i++)
         if (p8.held[i] == m) return;
     if (p8.nheld < sizeof p8.held) p8.held[p8.nheld++] = (uint8_t)m;
@@ -493,8 +507,10 @@ static void p800_note_on(uint32_t m)
 
 static void p800_note_off(uint32_t m)
 {
-    const p800_prog_t *g = p8.pg;
+    const p800_prog_t *g;
     uint32_t i, d, k;
+    p800_ready();
+    g = p8.pg;
     for (i = 0; i < p8.nheld && p8.held[i] != m; i++) {}
     if (i == p8.nheld) return;
     for (; i + 1 < p8.nheld; i++) p8.held[i] = p8.held[i + 1];
@@ -540,13 +556,15 @@ static void snd_block(p800_snd_t *s, int32_t *vb, int32_t mod12, uint32_t age)
 /* one block: P800_BLK samples, Q16 stereo */
 static void p800_render(int32_t *outl, int32_t *outr)
 {
-    const p800_prog_t *g = p8.pg;
+    const p800_prog_t *g;
     int32_t vb[P800_BLK];
     int16_t e3[P800_BLK];
     p800_df1_t c1, c2;
     p800_svf_t chp, cap[6];
     uint32_t i, k, nap = (uint32_t)p8.set[P800_PH_STAGES] + 1u;
     int32_t mg, mod12, fc, fcmg, hc, ph, chd[2], chs[2], nzq, og, wet, pfb, pmix;
+    p800_ready();
+    g = p8.pg;
     if (nap > 6u) nap = 6u;
     for (i = 0; i < P800_BLK; i++) vb[i] = 0;
 

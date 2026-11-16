@@ -88,8 +88,9 @@ What it took, beyond the page's own numbers:
 ## Inside Felucca (step 5)
 
 `firmware/src/eng_p800.c` makes the Poly-800 one more Felucca engine, POLY800 (engine 14 in this build), so Felucca's
-screens offer it as they are: it comes first in PRESETS (its 64 programs, the names shortened to Felucca's 12
-characters) and on the EDIT layer's first key. A part on POLY800 sends its notes to the one Poly-800
+screens offer it as they are: it comes last in PRESETS (its 64 programs, the names shortened to Felucca's 12
+characters; PRESETS' KNOB 2 picks the engine), with no EDIT layer key, as Felucca's ADPCM (first, or with a key, it
+pushed CLEAN INIT off the keyboard in a FELUCCA_FM4 build). A part on POLY800 sends its notes to the one Poly-800
 (`voice.c trk_note_on / trk_note_off`, no Felucca voice taken) and the Poly-800's stereo output joins the dry mix after
 the parts (`fx.c mix_block`), at half the mix's full scale: Felucca's output stage limits from 0.55 of full scale and
 soft-clips (tanh) everything, so the page's full scale sits under the limiter and only the loud organ chords meet it.
