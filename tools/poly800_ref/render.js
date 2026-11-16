@@ -2,7 +2,7 @@
 // Copyright (C) 2026 morbious22 (FM1-800)
 // FM1-800 step 3: render the Poly-800 web prototype's sound offline, as the reference the firmware must match.
 //
-//   node tools/poly800_ref/render.js PAGE.html OUT_DIR [--set page|dry|phaser] [--prog N,N..]
+//   node tools/poly800_ref/render.js PAGE.html OUT_DIR [--set page|dry|phaser] [--prog N,N..] [--seed N]
 //
 // PAGE.html is the prototype page (its own code is run unchanged, in headless Chromium: the same Web Audio as
 // Chrome). Its AudioContext is swapped for an OfflineAudioContext, Math.random is seeded, and the page's own
@@ -99,7 +99,7 @@ function writeWav(file, l, r) {
 async function main() {
   const args = process.argv.slice(2);
   const opt = (k, d) => { const i = args.indexOf(k); return i < 0 ? d : args.splice(i, 2)[1]; };
-  const setName = opt('--set', 'page'), progArg = opt('--prog', null);
+  const setName = opt('--set', 'page'), progArg = opt('--prog', null), seed = Number(opt('--seed', '0'));
   const [pagePath, outDir] = args;
   if (!pagePath || !outDir || !SETS[setName]) {
     console.error('usage: render.js PAGE.html OUT_DIR [--set page|dry|phaser] [--prog N,N..]');
@@ -109,7 +109,7 @@ async function main() {
   const src = fs.readFileSync(pagePath, 'utf8');
   if (!src.includes('<head>')) throw new Error('page has no <head>');
   const html = expose(src).replace('<head>', '<head><script>' + INIT + '</script>');   // runs before the page's script
-  const dir = path.join(outDir, setName);
+  const dir = path.join(outDir, setName + (seed ? `_seed${seed}` : ''));
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch();
   const page = await browser.newPage();
@@ -118,7 +118,7 @@ async function main() {
   const all = await page.evaluate(() => window.__p.PG.map((g) => [g[0], g[1]]));
   let progs = progArg ? progArg.split(',').map(Number) : set.progs || all.map((g) => g[0]);
   const names = Object.fromEntries(all);
-  const index = { set: setName, chromium: browser.version(), fs: FS, over: set.over, phrases: {}, renders: [] };
+  const index = { set: setName, seed, chromium: browser.version(), fs: FS, over: set.over, phrases: {}, renders: [] };
   for (const [k, ph] of Object.entries(PHRASES)) index.phrases[k] = { len: ph.len, events: ph.ev };
   const vary = set.vary || [{ name: '', over: {} }];
   for (const prog of progs) {
@@ -126,7 +126,7 @@ async function main() {
       for (const [phName, ph] of Object.entries(PHRASES)) {
         await load();                            // a fresh page each time: the page makes one AudioContext
         const over = { ...set.over, ...v.over };
-        const [l64, r64] = await renderOne(page, { prog, len: ph.len, ev: ph.ev, over, seed: prog * 7919 + 1 });
+        const [l64, r64] = await renderOne(page, { prog, len: ph.len, ev: ph.ev, over, seed: prog * 7919 + 1 + seed * 104729 });   // --seed: another take (Age, noise)
         const f32 = (s) => { const b = Buffer.from(s, 'base64'); return new Float32Array(b.buffer, b.byteOffset, b.length / 4); };
         const file = `${prog}${v.name ? '_' + v.name : ''}_${phName}.wav`;
         writeWav(path.join(dir, file), f32(l64), f32(r64));

@@ -7,7 +7,10 @@ firmware's sound (rendered on the computer from step 4 on) can be checked agains
 | --- | --- |
 | `render.js` | Runs the page's own code in headless Chromium (Chrome's Web Audio), offline, and records every factory program played three ways |
 | `measure.py` | Measures a set of recordings: level, loudness every 10 ms, third-octave spectrum, stereo width |
+| `compare.py` | Compares two sets of measurements, render by render, against the tolerances |
+| `gen_p800.py` | Reads the 64 programs out of the page and writes them, with the maths tables, as `firmware/src/p800_data.h` |
 | `../../tests/poly800/ref_*.json` | The measurements of the page: the target |
+| `../../tests/poly800/host.c`, `run.sh` | The firmware's sound (`firmware/src/p800.c`) played on the computer the same way, measured and compared |
 
 ## The recordings
 
@@ -49,3 +52,35 @@ Python 3 and numpy. Recorded with Chromium 153.
   27's chord); Chrome cuts those peaks off at the speakers. At most 8.4 % of a render's samples are cut, mostly
   organ chords as they start. The measurements are of the uncut sound.
 - Program 48 (Jet Plane) has no footages on: only noise sounds, and in the run it is nearly silent (DEG 3 single trigger).
+
+## The firmware's sound against the page (step 4)
+
+`tests/poly800/run.sh` builds `firmware/src/p800.c` for the computer, checks its pitch, plays the `dry` and `phaser`
+sets, measures them and compares them with the page's:
+
+| Check | Result |
+| --- | --- |
+| Pitch: every key 17..108, octave, interval, DCO 2 detune, tune ±50 | within 0.003 cents |
+| `dry`, 192 renders: level | median 0.01 dB, worst 0.63 dB (tolerance 1 dB) |
+| `dry`: third-octave bands | median 0.2 dB; 191 within tolerance, 1 near-miss allowed (23's run, 31 Hz: 3.1 dB against 3) |
+| `dry`: loudness every 10 ms (90 % of frames) | median 0.1 dB |
+| `phaser`, 36 renders (mix 10, feedback 0 and 10, off) | all within; level worst 0.18 dB, bands worst 0.5 dB |
+
+The `page` set has Age on: each note gets a random detune, so the page itself never plays a chord the same way twice.
+It is judged against the page's own spread instead: six takes of the page (`--seed`) and five of the firmware give
+the same average levels within 0.3 dB (program 34's run: 0.9 dB), and render by render the firmware differs from the
+page no more than one take of the page differs from another (bands median 1.4 dB against 1.3 dB, 90 % 4.3 against 4.3).
+
+What it took, beyond the page's own numbers:
+- **Chrome's filter, not a textbook one.** The page's filter is Chrome's BiquadFilterNode, a direct-form biquad: when
+  DEG 3 starts again on a key, the cutoff jumps and the old outputs it holds ring through the new coefficients, a
+  burst the page has on every note of a run. A state-variable filter (smoother, and what Felucca uses) leaves the
+  bursts out, so the two low-passes are direct form; their 1 / a0 is worked to 30 bits (at 40 Hz, 15 bits moved the
+  poles enough to ring). The shelves, high-pass and phaser allpasses stay state-variable: they move slowly, and
+  match Chrome's within 0.25 dB.
+- **Pitch in twelfths of a cent.** DCO 2's detune steps are 20/3 cents; rounded to quarter cents, the two DCOs' beating
+  drifted out of step with the page's within a held note.
+- **The polyBLEP's high end.** The 2-point polyBLEP smooths each step over two samples (harmonics fall as
+  sinc²(f / fs): -2.4 dB at 12.7 kHz); a fixed 3-tap filter on the voices puts most of it back.
+- **Fixed point at low cutoffs.** Through the filters the signal is 64 times finer (Q22), with rounding and the
+  direct form's error carried to the next sample, so nothing sticks a little off zero after the last note.
