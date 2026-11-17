@@ -113,7 +113,11 @@ static void fm1_main(void)
     settings_init();
     usb_serial_apply();                                 /* (#67: the saved USB SERIAL before usb_start) */
     lcd_init();
+#if FM1_800
+    u8_draw();                                          /* FM1-800: its home screen from the start (ui800.c) */
+#else
     draw_splash();                                      /* ui_draw.c (1.1.5) */
+#endif
     if (felucca_dbg.magic != DBG_MAGIC) {
         memset(&felucca_dbg, 0, sizeof felucca_dbg);
         felucca_dbg.magic = DBG_MAGIC;
@@ -257,15 +261,27 @@ static void fm1_main(void)
         felucca_dbg.page = ui.page;
         felucca_dbg.home = ui.home;
         felucca_dbg.stage = 1;
+#if FM1_800
+        u8_input();                                   /* FM1-800: the Poly-800's own controls and screen (ui800.c) */
+#else
         ui_input();
+#endif
         settings_poll();                              /* queued settings save: only while stopped */
         autosave_poll();                              /* (1.2) the music, stopped and idle: project.c */
         felucca_dbg.stage = 2;
+#if FM1_800
+        u8_draw();
+#else
         ui_leds();
         ui_draw();
+#endif
         felucca_dbg.stage = 9;
         while (fm1_ms - m < 15u) {                               /* ~60 UI frames/s at most */
+#if FM1_800
+            u8_input();
+#else
             ui_input();
+#endif
 #if FELUCCA_OTA
             ed_service();                       /* editor replies without waiting for the next frame */
 #endif

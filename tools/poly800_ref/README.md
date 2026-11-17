@@ -129,3 +129,14 @@ the first few ms of a chord (all its notes starting in step) at once, pulled the
 swell back within ~0.3 s. In the FM-1's build it now rises over ~3 ms and falls over ~0.7 s: those first peaks go to
 the knee (at most 0.32 % of the samples, program 27's chord), and over all 64 programs, with a 4-note chord, one note
 and an 8-note chord, the largest swell is 2.9 dB (was 10.2), the peak 32473 of 32767.
+
+## The Poly-800's own home screen (step 7a, v0.4.0)
+
+In the FM-1's build `firmware/src/ui800.c` takes over the screen and the controls from Felucca's UI (`main.c` calls
+`u8_input` and `u8_draw` in place of `ui_input`, `ui_leds`, `ui_draw`). The home screen is a sunset-city scene drawn
+from shapes (no picture stored): a purple sky with stars, a striped sun going yellow to pink, a skyline, a glowing
+grid. Over it the program's number and name, WHOLE or DOUBLE, the octave and PHASER when it is on; the version for
+4 s after power-on. It is drawn only when one of those changes. PRESETS turns through the 64 programs (round), OCT- /
+OCT+ move the keys an octave on release (-3 .. +3; both: 0). The keys and MIDI play as before. Text sits on the
+picture by blending each glyph pixel onto what is there (`gfx.c cv_over`; Felucca's own drawing is unchanged).
+`tests/poly800/ui800_test.c` checks the scene, the drawing only on change, PRESETS and OCT, and writes the screens.

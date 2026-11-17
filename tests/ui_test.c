@@ -10034,7 +10034,10 @@ static int test_ux18(void)
     return bad;
 }
 
-int main(void)
+#ifndef UI_TEST_MAIN
+#define UI_TEST_MAIN main                       /* (tests/poly800/ui800_test.c: its own main, these stubs) */
+#endif
+int UI_TEST_MAIN(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
     int bad = 0;

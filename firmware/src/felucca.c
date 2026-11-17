@@ -49,7 +49,7 @@
 #define FM1_CRASH_CTX_N 1u         /* chip/fm1_irq.h: the registers of the last crash only (80 B of .noinit; four would
                                     * not fit beside the project slots) */
 #ifndef FELUCCA_VERSION
-#define FELUCCA_VERSION "v0.3.1" /* FM1-800's own version (based on Felucca 1.8.2); shown in the menu, the console
+#define FELUCCA_VERSION "v0.4.0" /* FM1-800's own version (based on Felucca 1.8.2); shown in the menu, the console
                                   * and the editor; build.py --release X.Y */
 #endif
 #if FELUCCA_OTA && !FELUCCA_FLASH
@@ -111,6 +111,9 @@ static __attribute__((noinline)) int c1_wait(void) { return fm1_cpu1_wait(); }  
 #include "ui_menu.c"
 #include "ui_input.c"
 #include "ui_layer.c"              /* the quick layers (FX GLO SCL EDIT REC held; SEQ TOOLS: ui_tools.c) */
+#if FM1_800
+#include "ui800.c"               /* FM1-800: the Poly-800's own screen and controls (main.c) */
+#endif
 
 /* --------------------------------------------- storage, update, editor --- */
 #if FELUCCA_FLASH

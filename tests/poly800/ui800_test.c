@@ -1,0 +1,105 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Copyright (C) 2026 morbious22 (FM1-800) */
+/* FM1-800 step 7a: the Poly-800's home screen and controls (firmware/src/ui800.c) on tests/ui_test.c's stubs.
+ *   - the screen: the scene (sky, sun, grid where they belong), the program's number and name on it, drawn only
+ *     when something on it changes
+ *   - PRESETS: the next / previous program, round the 64; the program that plays follows (eng_p800.c)
+ *   - OCT- / OCT+: an octave on release, -3 .. +3, both together back to 0
+ * Writes OUT/home_<n>.ppm for a few programs (to look at).
+ *   cc -O1 -w -DFM1_800=1 [the include paths] -Itests -o ui800_test tests/poly800/ui800_test.c -lm; ./ui800_test OUT */
+#define UI_TEST_MAIN ui_test_main
+#include "ui_test.c"
+#include "../firmware/src/ui800.c"
+
+static int u8t_fails;
+static void u8t_ok(int c, const char *what)
+{
+    printf("  %s  %s\n", c ? "ok  " : "FAIL", what);
+    u8t_fails += !c;
+}
+static uint32_t u8t_px(uint32_t x, uint32_t y)        /* RGB888 of a screen pixel */
+{
+    uint16_t v = (uint16_t)((host_screen[y * 240u + x] >> 8) | (host_screen[y * 240u + x] << 8));
+    return (uint32_t)((v >> 11) * 255 / 31) << 16 | (uint32_t)(((v >> 5) & 63) * 255 / 63) << 8 | (uint32_t)((v & 31) * 255 / 31);
+}
+static void u8t_dump(const char *path)
+{
+    FILE *f = fopen(path, "wb");
+    uint32_t k;
+    if (!f) return;
+    fprintf(f, "P6 240 240 255\n");
+    for (k = 0; k < 240u * 240u; k++) {
+        uint32_t c = u8t_px(k % 240u, k / 240u);
+        fputc((int)(c >> 16), f), fputc((int)(c >> 8 & 255u), f), fputc((int)(c & 255u), f);
+    }
+    fclose(f);
+}
+static void u8t_turn(uint32_t role, int32_t s) { host_enc[panel.enc[role] % 7u] = s * panel.dir[role]; u8_input(); }
+static void u8t_tap(uint32_t btn)                     /* pressed, then let go */
+{
+    host_pressed = 1u << panel.btn[btn];
+    fm1_in.buttons |= 1u << panel.btn[btn];
+    u8_input();
+    fm1_in.buttons &= ~(1u << panel.btn[btn]);
+    u8_input();
+}
+
+int main(int argc, char **argv)
+{
+    static const uint8_t SHOW[4] = {0, 1, 15, 63};
+    char path[600];
+    uint32_t i, c, white = 0, rows;
+    const char *out = argc > 1 ? argv[1] : ".";
+    printf("FM1-800 home screen (ui800.c)\n");
+    ui_power_on();                                /* (ui_test.c: the panel set up, the parts at their defaults) */
+    p800_init();
+    trk[0].engine = trk[0].eng_req = ENGI_P800;
+    trk[0].preset = 0;
+    fm1_ms = 100000;
+    u8_input();
+    u8_draw();
+    c = u8t_px(10, 2);
+    u8t_ok((c >> 16) < 60 && (c & 255u) > (c >> 16), "the sky at the top is dark purple");
+    c = u8t_px(U8_CX, U8_CY - 40);
+    u8t_ok((c >> 16) > 200 && (c >> 8 & 255u) > 150 && (c & 255u) < 160, "the sun is yellow at its top");
+    c = u8t_px(U8_CX, U8_HZ);
+    u8t_ok((c >> 16) > 200 && (c & 255u) > 150, "the horizon glows pink");
+    for (i = 0; i < 240u * 30u; i++)
+        white += (host_screen[i] == 0xFFFFu);
+    u8t_ok(white > 40, "the program's name is drawn in white at the top");
+    rows = host_blit_rows;
+    u8_draw();
+    u8t_ok(host_blit_rows == rows, "nothing changed: nothing drawn");
+    u8t_turn(EN_PRESET, 1);
+    u8t_ok(trk[0].preset == 1, "PRESETS clockwise: the next program");
+    u8_draw();
+    u8t_ok(host_blit_rows == rows + 240u, "a new program: the screen drawn once (two strips of 120 rows)");
+    u8t_turn(EN_PRESET, -2);
+    u8t_ok(trk[0].preset == P800_NPROG - 1u, "PRESETS anticlockwise from the first: the last (round the 64)");
+    {
+        int32_t o[2 * CTL];
+        mix_block(o, CTL);
+        u8t_ok(p8.pg == &P800_PROGS[P800_NPROG - 1u], "the program shown is the program that plays");
+    }
+    u8t_tap(B_OCTDN);
+    u8t_ok(song.octave == -1, "OCT- (on release): an octave down");
+    u8t_tap(B_OCTDN), u8t_tap(B_OCTDN), u8t_tap(B_OCTDN);
+    u8t_ok(song.octave == -3, "no lower than -3");
+    host_pressed = 1u << panel.btn[B_OCTDN];
+    fm1_in.buttons |= (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]);
+    u8_input();
+    fm1_in.buttons = 0;
+    u8_input();
+    u8t_ok(song.octave == 0, "OCT- and OCT+ together: back to 0");
+    u8t_tap(B_OCTUP);
+    u8t_ok(song.octave == 1, "OCT+: an octave up");
+    for (i = 0; i < 4u; i++) {
+        trk[0].preset = SHOW[i];
+        song.octave = 0;
+        u8_draw();
+        snprintf(path, sizeof path, "%s/home_%u.ppm", out, P800_PROGS[SHOW[i]].num);
+        u8t_dump(path);
+    }
+    printf(u8t_fails ? "%d FAILED\n" : "all passed\n", u8t_fails);
+    return u8t_fails != 0;
+}

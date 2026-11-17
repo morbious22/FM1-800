@@ -192,6 +192,19 @@ static uint32_t palette_to_stored(uint32_t i) { return UI_PAL_TAG + i % NPALETTE
 static int palette_stored_ok(uint32_t v) { return v < 20u || (v >= UI_PAL_TAG && v - UI_PAL_TAG < NPALETTES); }
 
 static inline uint16_t swap16(uint32_t c) { return (uint16_t)(((c >> 8) & 0xFFu) | ((c & 0xFFu) << 8)); }
+/* FM1-800 (ui800.c): text over a picture. With cv_over set, a glyph's pixel is cv_over_fg blended onto the pixel
+ * already there by its alpha (0..15), not the ramp's blend onto one background colour */
+static uint8_t cv_over;
+static uint16_t cv_over_fg;
+static uint16_t cv_blend(uint16_t under, uint32_t a)
+{
+    uint32_t u = swap16(under), f = cv_over_fg, r, g, b;
+    r = (((u >> 11) & 31u) * (15u - a) + ((f >> 11) & 31u) * a + 7u) / 15u;
+    g = (((u >> 5) & 63u) * (15u - a) + ((f >> 5) & 63u) * a + 7u) / 15u;
+    b = ((u & 31u) * (15u - a) + (f & 31u) * a + 7u) / 15u;
+    return swap16(r << 11 | g << 5 | b);
+}
+#define CV_PUT(under, v, rv) (cv_over ? cv_blend((under), (v)) : (rv)[v])
 
 /* ------------------------------------------------------------ canvas --- */
 static void cv_begin(uint32_t w, uint32_t h, uint16_t bg)
@@ -403,7 +416,7 @@ static void cv_alpha(int32_t x, int32_t y, uint32_t w, uint32_t h, const uint8_t
             uint32_t v = (d[k >> 1] >> ((k & 1u) ? 0 : 4)) & 15u;
             int32_t px = x + (int32_t)gx;
             if (v && (uint32_t)px < cv_w)
-                row[px] = rv[v];
+                row[px] = CV_PUT(row[px], v, rv);
         }
     }
     GFX_HOOK_PIXELS(w * h);
@@ -479,7 +492,7 @@ static void cv_alpha_hc(int32_t x, int32_t y, uint32_t w, uint32_t h, const uint
                 uint32_t k;
                 for (k = 0; k < n; k++, px += dx)
                     if ((uint32_t)px < cv_w)
-                        row[px] = rv[v];
+                        row[px] = CV_PUT(row[px], v, rv);
             }
             gx += n;
             run -= n;
