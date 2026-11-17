@@ -397,7 +397,8 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
     uint32_t any = 0, i, mode = trk_vmode(t);
     if (t->p[P_MUTE])
         return;
-    if (P8E_PART(t)) {                                  /* FM1-800: POLY800's notes go to the Poly-800, no voice here */
+    if (FM1_800 || P8E_PART(t)) {                       /* FM1-800: POLY800's notes go to the Poly-800, no voice here
+                                                         * (FM1_800: every part's) */
         p800_note_on(note);
         return;
     }
@@ -446,7 +447,7 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
 static void trk_note_off(track_t *t, uint32_t note)
 {
     uint32_t i, k = 0, mode = trk_vmode(t);
-    if (P8E_PART(t) || t->engine == ENGI_P800)          /* FM1-800: (a part switched away lets its notes go too) */
+    if (FM1_800 || P8E_PART(t) || t->engine == ENGI_P800)   /* FM1-800: (a part switched away lets its notes go too) */
         p800_note_off(note);
     for (i = 0; i < t->xp_n; i++)                       /* not sounding yet (engine switch): forget it */
         if (t->xp_note[i] != note) {

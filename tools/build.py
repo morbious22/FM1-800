@@ -212,6 +212,8 @@ def build_app():
     v = os.environ.get("FELUCCA_USB_LAYOUT")   # firmware/src/usb.c: how the USB composite presents itself (#67), 0..3
     if v in ("0", "1", "2", "3"):
         flags.append(f"-DFELUCCA_USB_LAYOUT={v}")
+    # FM1-800 (step 6): the FM-1 is the Poly-800 alone; FM1_800=0 builds Felucca with POLY800 as one engine
+    flags.append(f"-DFM1_800={0 if os.environ.get('FM1_800') == '0' else 1}")
     flags.append(f'-DFELUCCA_ID="{PRODUCT}"')
     if VERSION:
         flags.append(f'-DFELUCCA_VERSION="{VERSION}"')

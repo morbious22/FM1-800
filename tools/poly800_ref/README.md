@@ -108,3 +108,18 @@ Felucca's UI test (`tests/ui_test.c`) passes as before: part 1 still starts on A
 Felucca's own suite (`tests/run_tests.sh`, all but the tests that need the JieLi build) passes as it did on the step 4
 code. Felucca's regression renders play every POLY800 program too (`tests/golden.txt`: 64 renders added, none of
 Felucca's changed); their health check waits for the Poly-800's voices and its noise (`p800_busy`), then wants silence.
+
+## The FM-1 is the Poly-800 alone (step 6, v0.3.0)
+
+The FM-1's build (`tools/build.py`, `FM1_800=1`; `FM1_800=0` builds it as step 5 left it, one engine of Felucca's,
+which Felucca's own tests still use until step 9) makes the FM-1 the Poly-800 and nothing else:
+
+- every note, from any part, the keys, the sequencer or MIDI, goes to the Poly-800 (`voice.c`); no Felucca voice plays
+- only the Poly-800 is rendered (`fx.c mix_block`): Felucca's voices, chorus, delay and reverb cost nothing
+- it goes straight to the output: MASTER, the DC block, LOW CUT and the limiter as before, but no tanh. In its place a
+  knee: straight up to 0.75 of full scale, then bent smoothly under full scale. The piano note is now the page's level
+  6 dB down within 0.01 dB (it was 0.03 dB off through the tanh)
+- at power-on part 1 plays P-800 (STRINGS)
+
+`tests/poly800/in_felucca.c` runs in both builds; in the FM-1's it also checks that a part on another engine plays the
+Poly-800, and that the knee never passes full scale.

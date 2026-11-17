@@ -20,6 +20,12 @@
 #define FELUCCA_FM4 0            /* the DIGITAL engine (eng_digital.c, four-operator FM): kept in the tree, not built
                                   * by default; replaced by FM6, its sounds convert (fm4_convert.c) */
 #endif
+#ifndef FM1_800
+#define FM1_800 0                /* FM1-800 (step 6): 1 = the FM-1 is the Poly-800 alone: every note to it (voice.c),
+                                  * only it rendered, straight to the output (fx.c mix_block), part 1 on it at power-on.
+                                  * tools/build.py builds the FM-1 with 1; 0 is Felucca with POLY800 as one engine, as its
+                                  * own tests (tests/) still build it until step 9 */
+#endif
 #ifndef FELUCCA_CPU2
 #define FELUCCA_CPU2 1           /* the second core (src/felucca.c): 1 = built in, MENU > 2ND CORE ON lets it render
                                   * some parts; 0 = none of it */

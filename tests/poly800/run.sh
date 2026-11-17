@@ -19,9 +19,11 @@ for set in dry phaser; do
 done
 # step 5: inside Felucca (its engine list, voice.c, fx.c); needs Felucca's generated headers (build/gen: ./build.sh)
 if [ -f build/gen/felucca_tables.h ]; then
-    cc -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -Ifirmware/bsp/chip -Ifirmware/bsp/boards/fm1 \
-        -o "$OUT/in_felucca" tests/poly800/in_felucca.c -lm
-    "$OUT/in_felucca"
+    for m in 1 0; do                              # FM1_800=1: the FM-1's build (step 6); 0: P-800 as one Felucca engine
+        cc -O2 -w -DFM1_800=$m -Ibuild/gen -Ifirmware/src -Ifirmware/hal -Ifirmware/bsp/chip -Ifirmware/bsp/boards/fm1 \
+            -o "$OUT/in_felucca$m" tests/poly800/in_felucca.c -lm
+        "$OUT/in_felucca$m"
+    done
 else
     echo "(inside Felucca: skipped, no build/gen: run ./build.sh first)"
 fi

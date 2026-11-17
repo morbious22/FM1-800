@@ -118,7 +118,7 @@ int main(void)
         if (P800_PROGS[i].num == 27) idx27 = i;
         if (P800_PROGS[i].num == 12) idx12 = i;
     }
-    printf("POLY800 inside Felucca (engine %u, %u presets, last in PRESETS: %s)\n", ENGI_P800,
+    printf("POLY800 inside Felucca, FM1_800=%d (engine %u, %u presets, last in PRESETS: %s)\n", FM1_800, ENGI_P800,
            ENGINES[ENGI_P800]->npresets, ENGINES[ENGINE_ORDER[NENG_SHOWN - 1]]->name);
     ok(ENGINE_ORDER[NENG_SHOWN - 1] == ENGI_P800 && ENGINES[ENGI_P800]->npresets == 64,
        "POLY800 is an engine with the 64 programs, last in the list");
@@ -127,7 +127,11 @@ int main(void)
     play(PIANO, 1, 1400, 700, &a, &pk);
     b = alone(idx12, PIANO, 1, 1400, 700);
     printf("  12 piano note: in Felucca %.2f dB, alone %.2f dB - 6 = %.2f dB, peak %d of 32768\n", a, b, b - 6.02, pk);
+#if FM1_800
+    ok(fabs(a - (b - 6.02)) < 0.05, "its level at the output is the page's, 6 dB down (within 0.05 dB: no tanh)");
+#else
     ok(fabs(a - (b - 6.02)) < 0.25, "its level in the mix is the page's, 6 dB down (within 0.25 dB)");
+#endif
     init(idx12);
     trk_note_on(&trk[0], 60, 100);
     ok(p8.nheld == 1 && felucca_voices() == 0, "a note reaches the Poly-800 and takes no Felucca voice");
@@ -157,6 +161,22 @@ int main(void)
         ok(p8.pg == &P800_PROGS[idx27], "the part's preset is the program that plays");
     }
 
+#if FM1_800
+    ok(TRK_DEF[0][0] == ENGI_P800, "at power-on part 1 is P-800 (STRINGS)");
+    init(idx12);                                  /* every part's notes go to it, none to Felucca's voices */
+    trk[1].engine = trk[1].eng_req = ENGI_FM6;
+    trk_note_on(&trk[1], 64, 100);
+    ok(p8.nheld == 1 && felucca_voices() == 0, "a note of part 2 (FM6) plays the Poly-800 too, no Felucca voice");
+    trk_note_off(&trk[1], 64);
+    ok(p8.nheld == 0, "and its note-off");
+    {                                             /* the knee: straight to 24576, then bent under 32767 */
+        int32_t x;
+        int ok_k = knee(24576) == 24576 && knee(-12000) == -12000 && knee(1 << 20) <= 32767 && knee(-(1 << 20)) >= -32767;
+        for (x = 24577; x < 200000; x += 7)
+            ok_k &= knee(x) >= knee(x - 7) && knee(x) <= 32767;
+        ok(ok_k, "the output knee: straight to 0.75, then rising to under full scale, never past");
+    }
+#else
     init(idx12);                                  /* a switch to another engine with a note held: let go, then silent */
     trk_note_on(&trk[0], 60, 100);
     trk[0].eng_req = 0;
@@ -169,6 +189,7 @@ int main(void)
         }
         ok(p8.nheld == 0 && !quiet && !p8e_live, "after a switch away its notes end; 8 s later it is silent and idle");
     }
+#endif
     printf(fails ? "%d FAILED\n" : "all passed\n", fails);
     return fails != 0;
 }

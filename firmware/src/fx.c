@@ -184,6 +184,21 @@ static inline int32_t spk_bass(int32_t m)
     return sb_hl + (sb_hl >> 1);      /* x1.5 (#180: x3 peaked at 1.5 .. 3.5 x a full-scale kick, the limiter */
 }                                     /* pulled the mix down up to 16 dB on each hit and the buzz took over) */
 
+#if FM1_800
+/* FM1-800's output ceiling: exactly straight up to 24576 (0.75 of the Q15 full scale: the limiter holds the music
+ * under 18000), then the soft clip's tanh scaled to the 8191 left, its slope 1 where they meet: a loud chord's first
+ * samples, before the limiter catches them, bend into 32472 instead of clicking on a hard ceiling */
+static inline int32_t knee(int32_t x)
+{
+    int32_t a = x < 0 ? -x : x;
+    if (a <= 24576)
+        return x;
+    a -= 24576;
+    a = 24576 + (softclip(a > 65536 ? 262144 : a * 4) >> 2);
+    return x < 0 ? -a : a;
+}
+#endif
+
 static inline void master_out(int32_t *l, int32_t *r)
 {
     int32_t al, ar, a;
@@ -209,8 +224,13 @@ static inline void master_out(int32_t *l, int32_t *r)
         *l = ((*l >> 4) * g) >> 11;                      /* >> 4 first: |l| may be far above Q15 */
         *r = ((*r >> 4) * g) >> 11;
     }
+#if FM1_800
+    *l = knee(*l);                    /* FM1-800: straight to 0.75, then the soft clip's curve (no tanh on all of it) */
+    *r = knee(*r);
+#else
     *l = softclip(*l);
     *r = softclip(*r);
+#endif
 }
 
 /* length of one division (N_DIV order) in samples at the song tempo */
@@ -1032,6 +1052,28 @@ static uint32_t mix_split(void)
 }
 #endif
 
+#if FM1_800
+/* FM1-800 (step 6): the FM-1 is the Poly-800 alone. The events as ever (keys, MIDI, arpeggio, the sequence: voice.c
+ * sends every part's notes to it), then only the Poly-800 (eng_p800.c), MASTER, and the output stage (master_out:
+ * DC block, the speaker's LOW CUT, the limiter, the knee). Felucca's parts, the second core's share and the FX buses
+ * are not run: they have nothing to play. The scale is Felucca's: the mix's >> 2 x MASTER (Q12) */
+static void mix_block(int32_t *out, uint32_t n)
+{
+    uint32_t i;
+    int32_t mg = fx_usb_fixed ? MASTER_FULL : (int32_t)song.master_q12;
+    for (i = 0; i < n; i++)
+        mix_l[i] = mix_r[i] = 0;
+    events_block(n);
+    p8e_mix(mix_l, mix_r, n);
+    for (i = 0; i < n; i++) {
+        int32_t l = ((mix_l[i] >> 2) * mg) >> 10;
+        int32_t r = ((mix_r[i] >> 2) * mg) >> 10;
+        master_out(&l, &r);
+        out[2u * i] = l;
+        out[2u * i + 1u] = r;
+    }
+}
+#else
 static void mix_block(int32_t *out, uint32_t n)
 {
     uint32_t i;
@@ -1087,3 +1129,4 @@ static void mix_block(int32_t *out, uint32_t n)
         out[2u * i + 1u] = r;
     }
 }
+#endif

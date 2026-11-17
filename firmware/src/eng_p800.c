@@ -67,7 +67,7 @@ static void p8e_mix(int32_t *l, int32_t *r, uint32_t n)
             p8e_prog = on->preset;
             p800_program(p8e_prog);
         }
-    } else if (p8.nheld) {
+    } else if (p8.nheld && !FM1_800) {          /* (FM1_800: every part plays it; the program stays) */
         p800_all_off();
     }
     if (p800_busy())
