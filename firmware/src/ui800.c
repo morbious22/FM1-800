@@ -17,7 +17,11 @@
  * at once; the lower half shows the section, the parameter and its value, the top "EDITED". The edits go into a copy
  * of the program (u8_ed), which the Poly-800 plays; turning PRESETS leaves them (saving them: step 8). GLO held +
  * KNOB 1: the tuning, -50 .. +50 cents. Each half of the screen is drawn again only when what it shows changes.
- * Every other control does nothing yet (7c: the FX button). */
+ * Step 7c, the effects: FX goes to the PHASER page and back (the echo's page will sit between). The phaser is one
+ * setting for every program, as a pedal on the floor: SELECT clockwise switches it on, anticlockwise off; KNOB 1..4
+ * RATE, DEPTH, FEEDBACK, MIX (0..10); GLO + KNOB 1 its STAGES (2..12). FX is lit while it is on.
+ * The lights (u8_leds, in place of Felucca's ui_leds): every button and key glows dim, FX lit with the phaser on, OCT-
+ * / OCT+ lit when the keys are moved down / up, a key lit while it is held. Every other control does nothing. */
 
 #define U8_HZ 150                                /* the horizon */
 #define U8_CX 120                                /* the sun's centre and the grid's vanishing point */
@@ -234,7 +238,9 @@ static const u8_par_t U8_PAR[] = {
 static p800_prog_t u8_ed;                        /* the program being edited (a copy: the 64 stay as they are); the
                                                   * Poly-800 plays it while p8.pg points here. A new program: gone */
 enum { UV_NONE, UV_PAR, UV_TUNE };
-static struct { uint8_t sel, view, prog; } ue;   /* the parameter SELECT is on, what the lower half shows, the program
+enum { PG_HOME, PG_PHASER };
+static struct { uint8_t sel, view, prog, page, ph_on, ph_set, ph_mix; } ue;   /* .. the page; the phaser on, its MIX
+                                                  * (p8.set's is 0 while it is off), read once from the defaults */   /* the parameter SELECT is on, what the lower half shows, the program
                                                   * the edits belong to */
 
 static int u8_edited(void) { return p8.pg == &u8_ed; }
@@ -276,11 +282,15 @@ static uint32_t u8_sig_top(void)
 }
 static uint32_t u8_sig_bot(void)
 {
-    uint32_t sig = 7u + (uint32_t)(song.octave + 3) * 3u + (uint32_t)(p8.set[P800_PH_MIX] > 0) * 31u +
-                   (uint32_t)(fm1_ms - u8.boot_ms < 4000u) * 61u + ue.view * 131u;
+    uint32_t sig = 7u + (uint32_t)(song.octave + 3) * 3u + (uint32_t)ue.ph_on * 31u +
+                   (uint32_t)(fm1_ms - u8.boot_ms < 4000u) * 61u + ue.view * 131u + ue.page * 977u;
+    if (ue.page == PG_PHASER)
+        sig += (uint32_t)p8.set[P800_PH_STAGES] * 11u + (uint32_t)p8.set[P800_PH_RATE] * 101u +
+               (uint32_t)p8.set[P800_PH_DEPTH] * 1103u + (uint32_t)p8.set[P800_PH_FB] * 12011u + ue.ph_mix * 130003u;
+    else
     if (ue.view == UV_PAR)
         sig += ue.sel * 1009u + u8_get(ue.sel) * 100003u;
-    if (ue.view == UV_TUNE)
+    else if (ue.view == UV_TUNE)
         sig += (uint32_t)(p8.set[P800_TUNE] + 50) * 7919u;
     return sig;
 }
@@ -316,7 +326,24 @@ static void u8_draw(void)
         u8_text(nx, 29, &AF_S, g->mode ? "DOUBLE" : "WHOLE", u8_rgb(255, 170, 230));
         if (u8_edited())                         /* (not what is stored: SAVE comes with step 8) */
             u8_text(nx + text_w(&AF_S, g->mode ? "DOUBLE" : "WHOLE") + 10, 29, &AF_S, "EDITED", u8_rgb(255, 230, 120));
-        if (ue.view == UV_PAR) {                 /* the parameter: its section, its name, its value */
+        if (ue.page == PG_PHASER) {              /* the phaser: on / off, STAGES, and KNOB 1..4's values in four columns */
+            static const char *const L[4] = {"RATE", "DEPTH", "FEEDBACK", "MIX"};
+            static const uint8_t ID[4] = {P800_PH_RATE, P800_PH_DEPTH, P800_PH_FB, 0};
+            uint32_t c;
+            u8_text(10, 152, &AF_S, "PHASER", u8_rgb(255, 170, 230));
+            str_cpy(tn, "STAGES ", sizeof tn);
+            u8_text(10, 168, &AF_S, tn, u8_rgb(255, 255, 255));
+            fmt_int(v, 2 * (p8.set[P800_PH_STAGES] + 1));
+            u8_text(10 + text_w(&AF_S, tn), 168, &AF_S, v, u8_rgb(120, 240, 255));
+            u8_text(230 - text_w(&AF_L, ue.ph_on ? "ON" : "OFF"), 148, &AF_L, ue.ph_on ? "ON" : "OFF",
+                    ue.ph_on ? u8_rgb(120, 240, 255) : u8_rgb(150, 120, 170));
+            for (c = 0; c < 4u; c++) {
+                int32_t cx = 30 + 60 * (int32_t)c;
+                fmt_int(v, c == 3u ? ue.ph_mix : p8.set[ID[c]]);
+                u8_text(cx - text_w(&AF_S, L[c]) / 2, 186, &AF_S, L[c], u8_rgb(255, 170, 230));
+                u8_text(cx - text_w(&AF_M, v) / 2, 199, &AF_M, v, u8_rgb(255, 255, 255));
+            }
+        } else if (ue.view == UV_PAR) {          /* the parameter: its section, its name, its value */
             u8_val(v, ue.sel, u8_get(ue.sel));
             u8_text(10, 164, &AF_S, U8_PAR[ue.sel].sec, u8_rgb(255, 170, 230));
             u8_text(10, 180, &AF_M, U8_PAR[ue.sel].name, u8_rgb(255, 255, 255));
@@ -328,12 +355,12 @@ static void u8_draw(void)
             u8_text(10, 164, &AF_S, "GLOBAL", u8_rgb(255, 170, 230));
             u8_text(10, 180, &AF_M, "TUNE (CENTS)", u8_rgb(255, 255, 255));
             u8_text(230 - text_w(&AF_L, tn), 168, &AF_L, tn, u8_rgb(120, 240, 255));
-        } else if (fm1_ms - u8.boot_ms < 4000u) {
+        } else if (fm1_ms - u8.boot_ms < 4000u) {   /* (just after power-on: the version) */
             u8_text(120 - text_w(&AF_S, "FM1-800 " FELUCCA_VERSION) / 2, 200, &AF_S, "FM1-800 " FELUCCA_VERSION,
                     u8_rgb(255, 255, 255));
         }
         u8_text(10, 220, &AF_S, o, u8_rgb(120, 240, 255));
-        if (p8.set[P800_PH_MIX] > 0)
+        if (ue.ph_on && ue.page == PG_HOME)
             u8_text(230 - text_w(&AF_S, "PHASER"), 220, &AF_S, "PHASER", u8_rgb(255, 170, 230));
         if (!y0) {                               /* the stars the text covers (all lie in this strip) stay still */
             uint32_t i;
@@ -357,7 +384,16 @@ static void u8_input(void)
     (void)fm1_input_note_edges();                /* (the keys play from seq.c: their edges are nobody's here) */
     if (!u8.boot_ms)
         u8.boot_ms = fm1_ms | 1u;
+    if (!ue.ph_set) {                            /* the phaser: on, at the page's MIX (as the Poly-800 sound opens) */
+        ue.ph_set = 1;
+        ue.ph_on = p8.set[P800_PH_MIX] > 0;
+        ue.ph_mix = (uint8_t)(ue.ph_on ? p8.set[P800_PH_MIX] : P800_SET_DEF[P800_PH_MIX]);
+    }
     song.grid = 0;                               /* the keys play */
+    if ((pressed >> panel.btn[B_FX]) & 1u) {     /* FX: the PHASER page and back */
+        ue.page = ue.page == PG_PHASER ? PG_HOME : PG_PHASER;
+        if (ue.view == UV_TUNE) ue.view = UV_PAR;
+    }
     if ((s = panel_enc(EN_PRESET)) != 0) {       /* PRESETS: the program, round the 64 (its edits gone) */
         int32_t p = ((int32_t)trk[0].preset + s) % (int32_t)P800_NPROG;
         trk[0].preset = (uint8_t)(p < 0 ? p + (int32_t)P800_NPROG : p);
@@ -366,6 +402,23 @@ static void u8_input(void)
         ue.view = UV_NONE;                       /* (the program alone; SELECT keeps its place) */
     }
     ue.prog = trk[0].preset;
+    if (ue.page == PG_PHASER) {                  /* the phaser's page: SELECT on / off, KNOB 1..4, GLO + KNOB 1 */
+        static const uint8_t ID[4] = {P800_PH_RATE, P800_PH_DEPTH, P800_PH_FB, P800_PH_MIX};
+        if ((s = panel_enc(EN_SELECT)) != 0)
+            ue.ph_on = s > 0;
+        for (k = 0; k < 4u; k++)
+            if ((s = panel_enc(EN_K1 + k)) != 0) {
+                uint32_t id = glo && !k ? P800_PH_STAGES : ID[k], mx = id == P800_PH_STAGES ? 5u : 10u;
+                int32_t v = (id == P800_PH_MIX ? ue.ph_mix : p8.set[id]) + s;
+                v = v < 0 ? 0 : v > (int32_t)mx ? (int32_t)mx : v;
+                if (id == P800_PH_MIX)
+                    ue.ph_mix = (uint8_t)v;
+                else
+                    p800_set(id, v);
+            }
+        p800_set(P800_PH_MIX, ue.ph_on ? ue.ph_mix : 0);
+        (void)panel_enc(EN_ALGO);
+    } else {
     if ((s = panel_enc(EN_SELECT)) != 0) {       /* SELECT: the parameter (held at the first and last) */
         int32_t p = (int32_t)ue.sel + (ue.view == UV_PAR ? s : 0);   /* (the first turn shows where it is) */
         ue.sel = (uint8_t)(p < 0 ? 0 : p >= (int32_t)U8_NPAR ? (int32_t)U8_NPAR - 1 : p);
@@ -383,9 +436,10 @@ static void u8_input(void)
     }
     if (!glo && ue.view == UV_TUNE)              /* GLO let go: the parameter again */
         ue.view = UV_PAR;
-    for (k = EN_SELECT; k < NE; k++)             /* the other knobs: not yet (their turns dropped) */
+    for (k = EN_SELECT; k < NE; k++)             /* the other knobs: nothing here (their turns dropped) */
         if (k != EN_PRESET && k != EN_SELECT && k != EN_K1)
             (void)panel_enc(k);
+    }
     tap = oct_taps(pressed, 1);                  /* OCT- / OCT+ (on release; both together: 0) */
     if ((fm1_in.buttons & both) == both)
         song.octave = 0;
@@ -393,4 +447,37 @@ static void u8_input(void)
         song.octave -= song.octave > -3 ? 1 : 0;
     else if (tap & 2u)
         song.octave += song.octave < 3 ? 1 : 0;
+}
+
+/* the lights: every button and key glows dim (found in the dark), FX lit with the phaser on, OCT- / OCT+ lit when the
+ * keys are moved, a key lit while it is held; not over the power-on sweep */
+static void u8_leds(void)
+{
+    uint8_t nl[FM1_NCOL] = {0}, nd[FM1_NCOL] = {0};
+    uint32_t k, c, held = fm1_in.notes;
+    static uint8_t ready;
+    if (fm1_led_anim_on())
+        return;
+    if (!ready) {
+        led_pos_init();
+        ready = 1;
+    }
+    for (k = 0; k < NB; k++)
+        led_put(nd, panel.btn[k], 1);
+    for (k = 0; k < 27u; k++) {
+        led_put(nd, 14u + k, 1);
+        led_put(nl, 14u + k, (int)((held >> k) & 1u));
+    }
+    led_put(nl, panel.btn[B_FX], ue.ph_on);
+    led_put(nl, panel.btn[B_OCTDN], song.octave < 0);
+    led_put(nl, panel.btn[B_OCTUP], song.octave > 0);
+    fm1_led_dim_level(settings_leds == LEDS_DIM_LO);
+    for (c = 0; c < FM1_NCOL; c++) {
+        nd[c] = settings_leds == LEDS_DIM || settings_leds == LEDS_DIM_LO ? (uint8_t)(nd[c] & ~nl[c]) : 0u;
+        fm1_led_dim[c] = nd[c];
+        fm1_led_breath[c] = 0;
+        fm1_led_mid[c] = 0;
+    }
+    for (c = 0; c < FM1_NCOL; c++)
+        fm1_led[c] = nl[c];
 }

@@ -270,6 +270,7 @@ static void fm1_main(void)
         autosave_poll();                              /* (1.2) the music, stopped and idle: project.c */
         felucca_dbg.stage = 2;
 #if FM1_800
+        u8_leds();
         u8_draw();
 #else
         ui_leds();

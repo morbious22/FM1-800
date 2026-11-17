@@ -212,6 +212,46 @@ int main(int argc, char **argv)
         u8t_ok(co != 1000, "every parameter goes from 0 to its top");
         printf("  %u parameters\n", (uint32_t)U8_NPAR);
     }
+    {                                             /* step 7c: FX, the PHASER page, the lights */
+        uint32_t sel0 = ue.sel, co0 = u8_get(ue.sel);
+        uint8_t lit[FM1_NCOL];
+        u8t_ok(ue.ph_on && p8.set[P800_PH_MIX] == 5, "at power-on the phaser is on, at the page's MIX 5");
+        u8t_tap(B_FX);
+        u8t_ok(ue.page == PG_PHASER, "FX: the PHASER page");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/phaser.ppm", out);
+        u8t_dump(path);
+        u8t_turn(EN_SELECT, -1);
+        u8t_ok(!ue.ph_on && p8.set[P800_PH_MIX] == 0 && ue.ph_mix == 5, "SELECT anticlockwise: off (its MIX kept)");
+        u8t_turn(EN_SELECT, 1);
+        u8t_ok(ue.ph_on && p8.set[P800_PH_MIX] == 5, "SELECT clockwise: on again, at its MIX");
+        u8t_turn(EN_K1, 3), u8t_turn(EN_K2, -2), u8t_turn(EN_K3, 20), u8t_turn(EN_K4, 2);
+        u8t_ok(p8.set[P800_PH_RATE] == 7 && p8.set[P800_PH_DEPTH] == 4 && p8.set[P800_PH_FB] == 10 && p8.set[P800_PH_MIX] == 7,
+               "KNOB 1..4: RATE 7, DEPTH 4, FEEDBACK 10 (held at 10), MIX 7");
+        fm1_in.buttons |= 1u << panel.btn[B_GLO];
+        u8t_turn(EN_K1, 2);
+        fm1_in.buttons &= ~(1u << panel.btn[B_GLO]);
+        u8t_ok(p8.set[P800_PH_STAGES] == 2 && p8.set[P800_PH_RATE] == 7, "GLO + KNOB 1: STAGES 2 -> 6 (the rate as it was)");
+        u8t_ok(ue.sel == sel0 && u8_get(ue.sel) == co0, "on the PHASER page the program's parameter is left alone");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/phaser_set.ppm", out);
+        u8t_dump(path);
+        u8_leds();                                /* (its first call maps the lights: the host's map is empty) */
+        memset(led_pos, 0xFF, sizeof led_pos);    /* (as ui_test.c: FX's light put at column 1, row 1) */
+        led_pos[panel.btn[B_FX]] = 1u << 3 | 1u;
+        u8_leds();
+        memcpy(lit, fm1_led, sizeof lit);
+        u8t_ok(led_pos[panel.btn[B_FX]] != 0xFF && ((lit[led_pos[panel.btn[B_FX]] >> 3] >> (led_pos[panel.btn[B_FX]] & 7u)) & 1u),
+               "FX is lit while the phaser is on");
+        u8t_turn(EN_SELECT, -1);
+        u8_leds();
+        u8t_ok(!((fm1_led[led_pos[panel.btn[B_FX]] >> 3] >> (led_pos[panel.btn[B_FX]] & 7u)) & 1u), "and dark when it is off");
+        u8t_turn(EN_SELECT, 1);
+        u8t_tap(B_FX);
+        u8t_ok(ue.page == PG_HOME, "FX again: home");
+        u8t_turn(EN_K1, 1);
+        u8t_ok(u8_get(ue.sel) == co0 + 1u || u8_get(ue.sel) == U8_PAR[ue.sel].max, "home: KNOB 1 edits the program again");
+    }
     for (i = 0; i < 4u; i++) {
         trk[0].preset = SHOW[i];
         song.octave = 0;

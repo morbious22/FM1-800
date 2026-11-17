@@ -151,3 +151,9 @@ they are; the top shows EDITED, PRESETS leaves the edits (saving: step 8). GLO h
 cents. The screen's top half (the program) and bottom half (the parameter, octave, phaser) are drawn apart, each only
 when what it shows changes. `ui800_test.c` checks SELECT, KNOB 1 on every parameter's range, that a cutoff edit makes a
 note brighter, the tuning, and that PRESETS leaves the edits.
+
+**The FX button (step 7c, v0.6.0).** FX goes to the PHASER page and back. The phaser is one setting for every
+program, as a pedal on the floor: SELECT clockwise on, anticlockwise off (its MIX kept); KNOB 1..4 RATE, DEPTH,
+FEEDBACK, MIX (0..10), GLO + KNOB 1 STAGES (2..12). At power-on it is on at the page's settings. The lights are
+`ui800.c u8_leds`: the buttons and keys glow dim, FX lit while the phaser is on, OCT- / OCT+ lit when the keys are
+moved, a key lit while held.
