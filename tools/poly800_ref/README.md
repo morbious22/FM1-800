@@ -123,3 +123,9 @@ which Felucca's own tests still use until step 9) makes the FM-1 the Poly-800 an
 
 `tests/poly800/in_felucca.c` runs in both builds; in the FM-1's it also checks that a part on another engine plays the
 Poly-800, and that the knee never passes full scale.
+
+**v0.3.1, the limiter's timing.** On the FM-1 the loud programs went "dumpf" on every chord. Felucca's limiter caught
+the first few ms of a chord (all its notes starting in step) at once, pulled the level 6 to 14 dB down and let it
+swell back within ~0.3 s. In the FM-1's build it now rises over ~3 ms and falls over ~0.7 s: those first peaks go to
+the knee (at most 0.32 % of the samples, program 27's chord), and over all 64 programs, with a 4-note chord, one note
+and an 8-note chord, the largest swell is 2.9 dB (was 10.2), the peak 32473 of 32767.

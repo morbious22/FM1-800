@@ -117,6 +117,19 @@ static void track_dist(track_t *t, int32_t *b, uint32_t n)
  * ~150 ms release, threshold where tanh is still nearly linear, so chords
  * get quieter instead of crushed. */
 #define LIM_T 18000
+#ifndef LIM_ATK                         /* the envelope's rise: (a - env) >> LIM_ATK a sample; its fall: >> LIM_REL */
+#if FM1_800                             /* FM1-800: ~3 ms and ~0.7 s. The chords of the loud programs start with all
+                                         * their notes in step, a peak for a few ms: caught at once (Felucca's ~0.1 ms)
+                                         * it pulled them 6 to 14 dB down and let them swell back in ~0.3 s, a
+                                         * "dumpf" on every chord; now those peaks go to the knee (under 0.4 % of the
+                                         * samples) and the level holds */
+#define LIM_ATK 7
+#define LIM_REL 15
+#else
+#define LIM_ATK 2
+#define LIM_REL 12
+#endif
+#endif
 static int32_t lim_env = LIM_T;
 /* MENU > USB LEVEL FIXED (for #42: record over USB with the speaker turned down): the mix goes to master_out at the
  * full MASTER level, USB audio takes that (audio.c uac_tap), and only then does MASTER scale what the DAC gets
@@ -216,9 +229,9 @@ static inline void master_out(int32_t *l, int32_t *r)
     ar = *r < 0 ? -*r : *r;
     a = al > ar ? al : ar;
     if (a > lim_env)
-        lim_env += (a - lim_env) >> 2;
+        lim_env += (a - lim_env) >> LIM_ATK;
     else if (lim_env > LIM_T)
-        lim_env -= ((lim_env - LIM_T) >> 12) + 1;
+        lim_env -= ((lim_env - LIM_T) >> LIM_REL) + 1;
     if (lim_env > LIM_T) {
         int32_t g = (int32_t)(((uint32_t)LIM_T << 15) / (uint32_t)lim_env);   /* < 32768 */
         *l = ((*l >> 4) * g) >> 11;                      /* >> 4 first: |l| may be far above Q15 */
