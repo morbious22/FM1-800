@@ -102,7 +102,7 @@ int main(int argc, char **argv)
     u8t_turn(EN_PRESET, 1);
     u8t_ok(trk[0].preset == 1, "PRESETS clockwise: the next program");
     u8_draw();
-    u8t_ok(host_blit_rows == rows + 240u, "a new program: the screen drawn once (two strips of 120 rows)");
+    u8t_ok(host_blit_rows == rows + 120u, "a new program: the top half drawn again, once (the bottom has not changed)");
     u8t_turn(EN_PRESET, -2);
     u8t_ok(trk[0].preset == P800_NPROG - 1u, "PRESETS anticlockwise from the first: the last (round the 64)");
     {
@@ -122,6 +122,96 @@ int main(int argc, char **argv)
     u8t_ok(song.octave == 0, "OCT- and OCT+ together: back to 0");
     u8t_tap(B_OCTUP);
     u8t_ok(song.octave == 1, "OCT+: an octave up");
+    {                                             /* step 7b: SELECT, KNOB 1, GLO + KNOB 1 */
+        uint32_t co = 0, k, before_co;
+        double e0, e1;
+        trk[0].preset = 0;
+        song.master_q12 = 4096;                   /* (MASTER up: ui_power_on cleared it) */
+        p800_program(0);
+        p8e_prog = 0;
+        ue.view = UV_NONE;
+        ue.sel = 0;
+        u8_input();
+        u8_draw();
+        rows = host_blit_rows;
+        u8t_turn(EN_SELECT, 1);
+        u8t_ok(ue.view == UV_PAR && ue.sel == 0, "SELECT's first turn shows the parameter it is on (DCO 1 WAVE)");
+        u8_draw();
+        u8t_ok(host_blit_rows == rows + 120u, "a parameter shown: the bottom half drawn, not the top");
+        u8t_turn(EN_SELECT, 1);
+        u8t_ok(ue.sel == 1, "SELECT again: the next parameter (16')");
+        u8t_turn(EN_SELECT, -5);
+        u8t_ok(ue.sel == 0, "held at the first");
+        u8t_turn(EN_SELECT, 200);
+        u8t_ok(ue.sel == U8_NPAR - 1u && !strcmp(U8_PAR[ue.sel].name, "VOICES"), "held at the last (VOICES)");
+        for (k = 0; k < U8_NPAR; k++)
+            if (!strcmp(U8_PAR[k].name, "CUTOFF")) co = k;
+        ue.sel = (uint8_t)co;
+        before_co = P800_PROGS[0].co;
+        {                                         /* a note's brightness before the edit (its energy above ~3 kHz) */
+            int32_t o[2 * CTL];
+            uint32_t b, i;
+            double hi = 0;
+            for (b = 0; b < 300u; b++) {
+                if (b == 2u) trk_note_on(&trk[0], 60, 100);
+                mix_block(o, CTL);
+                for (i = 2; i < 2u * CTL; i += 2) hi += (double)(o[i] - o[i - 2]) * (o[i] - o[i - 2]);
+            }
+            trk_note_off(&trk[0], 60);
+            for (b = 0; b < 2000u; b++) mix_block(o, CTL);
+            e0 = hi;
+        }
+        u8t_turn(EN_K1, 20);
+        u8t_ok(p8.pg == &u8_ed && u8_ed.co == before_co + 20u && P800_PROGS[0].co == before_co,
+               "KNOB 1: CUTOFF +20 in the copy the Poly-800 plays; the factory program as it was");
+        u8t_ok(u8_edited() && u8_sig_top() != 0, "the program shows EDITED");
+        {
+            int32_t o[2 * CTL];
+            uint32_t b, i;
+            double hi = 0;
+            for (b = 0; b < 300u; b++) {
+                if (b == 2u) trk_note_on(&trk[0], 60, 100);
+                mix_block(o, CTL);
+                for (i = 2; i < 2u * CTL; i += 2) hi += (double)(o[i] - o[i - 2]) * (o[i] - o[i - 2]);
+            }
+            trk_note_off(&trk[0], 60);
+            for (b = 0; b < 2000u; b++) mix_block(o, CTL);
+            e1 = hi;
+        }
+        printf("  STRINGS, a note's top end: cutoff %u %.1f, cutoff %u %.1f (x%.1f)\n", before_co, e0 / 1e9, before_co + 20u, e1 / 1e9, e1 / e0);
+        u8t_ok(e1 > 2 * e0, "and it sounds: the note is brighter");
+        u8t_turn(EN_K1, 500);
+        u8t_ok(u8_ed.co == 99, "a value held at its top (CUTOFF 99)");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/edit_cutoff.ppm", out);
+        u8t_dump(path);
+        fm1_in.buttons |= 1u << panel.btn[B_GLO];
+        u8t_turn(EN_K1, 7);
+        u8t_ok(p8.set[P800_TUNE] == 7 && ue.view == UV_TUNE && u8_ed.co == 99, "GLO + KNOB 1: the tuning +7 cents (not the cutoff)");
+        u8t_turn(EN_K1, 100);
+        u8t_ok(p8.set[P800_TUNE] == 50, "held at +50");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/tune.ppm", out);
+        u8t_dump(path);
+        fm1_in.buttons &= ~(1u << panel.btn[B_GLO]);
+        u8_input();
+        u8t_ok(ue.view == UV_PAR, "GLO let go: the parameter again");
+        p800_set(P800_TUNE, 0);
+        u8t_turn(EN_PRESET, 1);
+        u8t_ok(p8.pg == &P800_PROGS[1] && !u8_edited() && ue.view == UV_NONE, "PRESETS: the next program as stored, the edits gone");
+        u8t_turn(EN_PRESET, -1);
+        u8t_ok(p8.pg == &P800_PROGS[0] && P800_PROGS[0].co == before_co, "and back: STRINGS as it was");
+        for (k = 0; k < U8_NPAR; k++) {           /* every parameter: SELECT reaches it, KNOB 1 moves it in its range */
+            uint32_t v;
+            ue.sel = (uint8_t)k;
+            u8t_turn(EN_K1, -100);
+            v = u8_get(k);
+            u8t_turn(EN_K1, 100);
+            if (v != 0 || u8_get(k) != U8_PAR[k].max) { printf("  %s %s: %u..%u\n", U8_PAR[k].sec, U8_PAR[k].name, v, u8_get(k)); co = 1000; }
+        }
+        u8t_ok(co != 1000, "every parameter goes from 0 to its top");
+        printf("  %u parameters\n", (uint32_t)U8_NPAR);
+    }
     for (i = 0; i < 4u; i++) {
         trk[0].preset = SHOW[i];
         song.octave = 0;

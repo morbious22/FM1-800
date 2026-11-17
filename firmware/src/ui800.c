@@ -11,7 +11,13 @@
  * the text covers stays as it is (so the text never flickers).
  * The controls: PRESETS turns through the 64 programs (part 1's preset: eng_p800.c p8e_mix loads it), OCT- / OCT+
  * move the keys an octave (-3 .. +3, both together: back to 0). The keys and MIDI play as before (seq.c, the MIDI
- * ISR); every other control does nothing yet (step 7b: SELECT and KNOB 1, GLO; 7c: the FX button). */
+ * ISR).
+ * Step 7b, editing as on the Poly-800: SELECT steps through the program's parameters (the page's order: DCO 1, DCO 2,
+ * noise, VCF, DEG 1..3, MG, chorus, voices; its first turn shows the one it is on), KNOB 1 sets its value and it sounds
+ * at once; the lower half shows the section, the parameter and its value, the top "EDITED". The edits go into a copy
+ * of the program (u8_ed), which the Poly-800 plays; turning PRESETS leaves them (saving them: step 8). GLO held +
+ * KNOB 1: the tuning, -50 .. +50 cents. Each half of the screen is drawn again only when what it shows changes.
+ * Every other control does nothing yet (7c: the FX button). */
 
 #define U8_HZ 150                                /* the horizon */
 #define U8_CX 120                                /* the sun's centre and the grid's vanishing point */
@@ -21,8 +27,6 @@
 
 static struct {
     uint8_t ok;                                  /* drawn at least once */
-    uint8_t prog, mode, ph, boot;                /* what is on the screen */
-    int8_t oct;
     uint32_t boot_ms;                            /* the version shows for 4 s after power-on */
     struct { uint8_t x, y, lvl, still; uint16_t per, ph; } st[U8_NSTAR];   /* the stars: place, brightness step drawn
                                                   * (0..3), under the text, cycle and phase (ms) */
@@ -199,20 +203,101 @@ static void u8_text(int32_t x, int32_t y, const aafont_t *f, const char *s, uint
     cv_over = 0;
 }
 
+/* ------------------------------------------------------------------ editing (step 7b) --- */
+/* the program's parameters in the order SELECT steps through them: the page's sections, DCO 1 to the voices */
+enum { PK_NUM, PK_ONOFF, PK_WAVE, PK_OCT, PK_KT, PK_POL, PK_TRIG, PK_VOICES };
+typedef struct { const char *sec, *name; uint8_t kind, max; uint16_t off; } u8_par_t;
+#define U8_PO(f) ((uint16_t)__builtin_offsetof(p800_prog_t, f))
+#define U8_DCO(n, d) {n, "WAVE", PK_WAVE, 1, U8_PO(dco[d].saw)}, {n, "16'", PK_ONOFF, 1, U8_PO(dco[d].foot[0])}, \
+    {n, "8'", PK_ONOFF, 1, U8_PO(dco[d].foot[1])}, {n, "4'", PK_ONOFF, 1, U8_PO(dco[d].foot[2])},              \
+    {n, "2'", PK_ONOFF, 1, U8_PO(dco[d].foot[3])}, {n, "OCTAVE", PK_OCT, 2, U8_PO(dco[d].oct)},               \
+    {n, "LEVEL", PK_NUM, 31, U8_PO(dco[d].level)}
+#define U8_DEG(n, e) {n, "ATTACK", PK_NUM, 31, U8_PO(deg[e][0])}, {n, "DECAY", PK_NUM, 31, U8_PO(deg[e][1])}, \
+    {n, "BREAK POINT", PK_NUM, 31, U8_PO(deg[e][2])}, {n, "SLOPE", PK_NUM, 31, U8_PO(deg[e][3])},            \
+    {n, "SUSTAIN", PK_NUM, 31, U8_PO(deg[e][4])}, {n, "RELEASE", PK_NUM, 31, U8_PO(deg[e][5])}
+static const u8_par_t U8_PAR[] = {
+    U8_DCO("DCO 1", 0),
+    U8_DCO("DCO 2", 1),
+    {"DCO 2", "INTERVAL", PK_NUM, 12, U8_PO(iv)}, {"DCO 2", "DETUNE", PK_NUM, 3, U8_PO(dt)},
+    {"NOISE", "LEVEL", PK_NUM, 15, U8_PO(nz)},
+    {"VCF", "CUTOFF", PK_NUM, 99, U8_PO(co)}, {"VCF", "RESONANCE", PK_NUM, 15, U8_PO(rs)},
+    {"VCF", "KEY TRACK", PK_KT, 2, U8_PO(kt)}, {"VCF", "EG INTENSITY", PK_NUM, 15, U8_PO(ei)},
+    {"VCF", "EG POLARITY", PK_POL, 1, U8_PO(ep)}, {"VCF", "TRIGGER", PK_TRIG, 1, U8_PO(tr)},
+    U8_DEG("DEG 1", 0), U8_DEG("DEG 2", 1), U8_DEG("DEG 3", 2),
+    {"MG", "FREQUENCY", PK_NUM, 15, U8_PO(mg[0])}, {"MG", "DELAY", PK_NUM, 15, U8_PO(mg[1])},
+    {"MG", "DCO INTENSITY", PK_NUM, 15, U8_PO(mg[2])}, {"MG", "VCF INTENSITY", PK_NUM, 15, U8_PO(mg[3])},
+    {"CHORUS", "CHORUS", PK_ONOFF, 1, U8_PO(ch)},
+    {"VOICES", "VOICES", PK_VOICES, 1, U8_PO(mode)},
+};
+#define U8_NPAR (sizeof U8_PAR / sizeof U8_PAR[0])
+
+static p800_prog_t u8_ed;                        /* the program being edited (a copy: the 64 stay as they are); the
+                                                  * Poly-800 plays it while p8.pg points here. A new program: gone */
+enum { UV_NONE, UV_PAR, UV_TUNE };
+static struct { uint8_t sel, view, prog; } ue;   /* the parameter SELECT is on, what the lower half shows, the program
+                                                  * the edits belong to */
+
+static int u8_edited(void) { return p8.pg == &u8_ed; }
+static uint32_t u8_get(uint32_t k) { return ((const uint8_t *)p8.pg)[U8_PAR[k].off]; }
+
+/* the value's words: a number, or what the setting is called */
+static void u8_val(char *b, uint32_t k, uint32_t v)
+{
+    static const char *const W[][3] = {{"", "", ""}, {"OFF", "ON", ""}, {"SQUARE", "SAW", ""}, {"LOW", "MID", "HIGH"},
+                                       {"OFF", "HALF", "FULL"}, {"NORMAL", "INVERT", ""}, {"SINGLE", "MULTI", ""},
+                                       {"WHOLE", "DOUBLE", ""}};
+    uint32_t kind = U8_PAR[k].kind;
+    if (kind == PK_NUM)
+        fmt_int(b, (int32_t)v);
+    else
+        str_cpy(b, W[kind][v < 3u ? v : 0u], 8);
+}
+
+/* KNOB 1: parameter k by s steps (held at its ends); the first edit of a program makes the copy the Poly-800 plays */
+static void u8_edit(uint32_t k, int32_t s)
+{
+    int32_t v = (int32_t)u8_get(k) + s;
+    if (v < 0) v = 0;
+    if (v > U8_PAR[k].max) v = U8_PAR[k].max;
+    if (!u8_edited()) {
+        u8_ed = *p8.pg;
+        p8.pg = &u8_ed;                          /* (one store: the audio reads the copy from the next block) */
+    }
+    ((uint8_t *)&u8_ed)[U8_PAR[k].off] = (uint8_t)v;
+    p800_apply();                                /* (the cutoff's base, key tracking) */
+}
+
+/* what the screen shows: the top half (the program) and the bottom half (a parameter, the octave, the phaser),
+ * each a signature; a half is drawn again only when its signature changes */
+static uint32_t u8_sig_top(void)
+{
+    const p800_prog_t *g = p8.pg && ue.prog == trk[0].preset ? p8.pg : &P800_PROGS[trk[0].preset % P800_NPROG];
+    return 1u + trk[0].preset + (uint32_t)g->mode * 101u + (uint32_t)u8_edited() * 211u;
+}
+static uint32_t u8_sig_bot(void)
+{
+    uint32_t sig = 7u + (uint32_t)(song.octave + 3) * 3u + (uint32_t)(p8.set[P800_PH_MIX] > 0) * 31u +
+                   (uint32_t)(fm1_ms - u8.boot_ms < 4000u) * 61u + ue.view * 131u;
+    if (ue.view == UV_PAR)
+        sig += ue.sel * 1009u + u8_get(ue.sel) * 100003u;
+    if (ue.view == UV_TUNE)
+        sig += (uint32_t)(p8.set[P800_TUNE] + 50) * 7919u;
+    return sig;
+}
+
 static void u8_draw(void)
 {
-    const p800_prog_t *g = &P800_PROGS[trk[0].preset % P800_NPROG];
-    uint32_t ph = p8.set[P800_PH_MIX] > 0, boot = fm1_ms - u8.boot_ms < 4000u, y0;
-    char num[4], o[8];
+    static uint32_t top, bot;
+    const p800_prog_t *g = u8_edited() ? p8.pg : &P800_PROGS[trk[0].preset % P800_NPROG];
+    uint32_t st = u8_sig_top(), sb = u8_sig_bot(), y0;
+    char num[4], o[8], v[12], tn[8];
     const aafont_t *nf;
     int32_t nx;
-    if (u8.ok && u8.prog == trk[0].preset && u8.mode == g->mode && u8.oct == song.octave && u8.ph == ph && u8.boot == boot) {
+    if (u8.ok && st == top && sb == bot) {
         u8_twinkle();
         return;
     }
     u8_stars();
-    u8.ok = 1, u8.prog = trk[0].preset, u8.mode = g->mode, u8.oct = (int8_t)song.octave, u8.ph = (uint8_t)ph;
-    u8.boot = (uint8_t)boot;
     num[0] = (char)('0' + g->num / 10u), num[1] = (char)('0' + g->num % 10u), num[2] = 0;
     str_cpy(o, "OCT ", sizeof o);
     if (song.octave > 0) str_cpy(o + 4, "+", sizeof o - 4);
@@ -220,6 +305,8 @@ static void u8_draw(void)
     nx = 10 + text_w(&AF_L, num) + 12;
     nf = text_w(&AF_M, g->name) <= 232 - nx ? &AF_M : &AF_S;   /* (a long name in the small face) */
     for (y0 = 0; y0 < 240u; y0 += 120u) {
+        if (u8.ok && (y0 ? sb == bot : st == top))
+            continue;                            /* (this half has not changed) */
         cv_begin(240, 120, 0);
         cv_oy = -(int32_t)y0;
         cv_cy0 = 0, cv_cy1 = 120;
@@ -227,12 +314,27 @@ static void u8_draw(void)
         u8_text(10, 6, &AF_L, num, u8_rgb(120, 240, 255));
         u8_text(nx, 9, nf, g->name, u8_rgb(255, 255, 255));
         u8_text(nx, 29, &AF_S, g->mode ? "DOUBLE" : "WHOLE", u8_rgb(255, 170, 230));
-        u8_text(10, 220, &AF_S, o, u8_rgb(120, 240, 255));
-        if (ph)
-            u8_text(230 - text_w(&AF_S, "PHASER"), 220, &AF_S, "PHASER", u8_rgb(255, 170, 230));
-        if (boot)
+        if (u8_edited())                         /* (not what is stored: SAVE comes with step 8) */
+            u8_text(nx + text_w(&AF_S, g->mode ? "DOUBLE" : "WHOLE") + 10, 29, &AF_S, "EDITED", u8_rgb(255, 230, 120));
+        if (ue.view == UV_PAR) {                 /* the parameter: its section, its name, its value */
+            u8_val(v, ue.sel, u8_get(ue.sel));
+            u8_text(10, 164, &AF_S, U8_PAR[ue.sel].sec, u8_rgb(255, 170, 230));
+            u8_text(10, 180, &AF_M, U8_PAR[ue.sel].name, u8_rgb(255, 255, 255));
+            u8_text(230 - text_w(&AF_L, v), 168, &AF_L, v, u8_rgb(120, 240, 255));
+        } else if (ue.view == UV_TUNE) {         /* GLO + KNOB 1 */
+            tn[0] = 0;
+            if (p8.set[P800_TUNE] > 0) str_cpy(tn, "+", sizeof tn);
+            fmt_int(tn + str_len(tn), p8.set[P800_TUNE]);
+            u8_text(10, 164, &AF_S, "GLOBAL", u8_rgb(255, 170, 230));
+            u8_text(10, 180, &AF_M, "TUNE (CENTS)", u8_rgb(255, 255, 255));
+            u8_text(230 - text_w(&AF_L, tn), 168, &AF_L, tn, u8_rgb(120, 240, 255));
+        } else if (fm1_ms - u8.boot_ms < 4000u) {
             u8_text(120 - text_w(&AF_S, "FM1-800 " FELUCCA_VERSION) / 2, 200, &AF_S, "FM1-800 " FELUCCA_VERSION,
                     u8_rgb(255, 255, 255));
+        }
+        u8_text(10, 220, &AF_S, o, u8_rgb(120, 240, 255));
+        if (p8.set[P800_PH_MIX] > 0)
+            u8_text(230 - text_w(&AF_S, "PHASER"), 220, &AF_S, "PHASER", u8_rgb(255, 170, 230));
         if (!y0) {                               /* the stars the text covers (all lie in this strip) stay still */
             uint32_t i;
             for (i = 0; i < U8_NSTAR; i++) {
@@ -244,22 +346,45 @@ static void u8_draw(void)
         cv_oy = 0;
         cv_blit(0, y0);
     }
+    u8.ok = 1, top = st, bot = sb;
 }
 
 static void u8_input(void)
 {
     uint32_t pressed = fm1_input_edges(0), both = (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]), tap, k;
+    uint32_t glo = (fm1_in.buttons >> panel.btn[B_GLO]) & 1u;
     int32_t s;
     (void)fm1_input_note_edges();                /* (the keys play from seq.c: their edges are nobody's here) */
     if (!u8.boot_ms)
         u8.boot_ms = fm1_ms | 1u;
     song.grid = 0;                               /* the keys play */
-    if ((s = panel_enc(EN_PRESET)) != 0) {       /* PRESETS: the program, round the 64 */
+    if ((s = panel_enc(EN_PRESET)) != 0) {       /* PRESETS: the program, round the 64 (its edits gone) */
         int32_t p = ((int32_t)trk[0].preset + s) % (int32_t)P800_NPROG;
         trk[0].preset = (uint8_t)(p < 0 ? p + (int32_t)P800_NPROG : p);
+        p800_program(trk[0].preset);             /* (now, not at the next block: the screen shows it at once) */
+        p8e_prog = trk[0].preset;
+        ue.view = UV_NONE;                       /* (the program alone; SELECT keeps its place) */
     }
+    ue.prog = trk[0].preset;
+    if ((s = panel_enc(EN_SELECT)) != 0) {       /* SELECT: the parameter (held at the first and last) */
+        int32_t p = (int32_t)ue.sel + (ue.view == UV_PAR ? s : 0);   /* (the first turn shows where it is) */
+        ue.sel = (uint8_t)(p < 0 ? 0 : p >= (int32_t)U8_NPAR ? (int32_t)U8_NPAR - 1 : p);
+        ue.view = UV_PAR;
+    }
+    if ((s = panel_enc(EN_K1)) != 0) {           /* KNOB 1: its value; with GLO held, the tuning */
+        if (glo) {
+            int32_t t = p8.set[P800_TUNE] + s;
+            p800_set(P800_TUNE, t < -50 ? -50 : t > 50 ? 50 : t);
+            ue.view = UV_TUNE;
+        } else {
+            u8_edit(ue.sel, s);
+            ue.view = UV_PAR;
+        }
+    }
+    if (!glo && ue.view == UV_TUNE)              /* GLO let go: the parameter again */
+        ue.view = UV_PAR;
     for (k = EN_SELECT; k < NE; k++)             /* the other knobs: not yet (their turns dropped) */
-        if (k != EN_PRESET)
+        if (k != EN_PRESET && k != EN_SELECT && k != EN_K1)
             (void)panel_enc(k);
     tap = oct_taps(pressed, 1);                  /* OCT- / OCT+ (on release; both together: 0) */
     if ((fm1_in.buttons & both) == both)

@@ -141,3 +141,13 @@ under the text stay still, v0.4.1). Over it the program's number and name, WHOLE
 OCT+ move the keys an octave on release (-3 .. +3; both: 0). The keys and MIDI play as before. Text sits on the
 picture by blending each glyph pixel onto what is there (`gfx.c cv_over`; Felucca's own drawing is unchanged).
 `tests/poly800/ui800_test.c` checks the scene, the drawing only on change, PRESETS and OCT, and writes the screens.
+
+**Editing (step 7b, v0.5.0).** SELECT steps through the program's 47 parameters in the page's order (DCO 1: wave, the
+four footages, octave, level; DCO 2 the same with interval and detune; noise; VCF: cutoff, resonance, key tracking, EG
+intensity and polarity, trigger; DEG 1..3: attack, decay, break point, slope, sustain, release; MG: frequency, delay, DCO
+and VCF intensity; chorus; voices). Its first turn shows the one it is on. KNOB 1 sets the value, held at the ends,
+and it sounds at once: the edits go into a copy of the program the Poly-800 plays (`ui800.c u8_ed`), the 64 stay as
+they are; the top shows EDITED, PRESETS leaves the edits (saving: step 8). GLO held + KNOB 1: the tuning, -50 .. +50
+cents. The screen's top half (the program) and bottom half (the parameter, octave, phaser) are drawn apart, each only
+when what it shows changes. `ui800_test.c` checks SELECT, KNOB 1 on every parameter's range, that a cutoff edit makes a
+note brighter, the tuning, and that PRESETS leaves the edits.
