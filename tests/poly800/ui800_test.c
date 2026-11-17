@@ -57,6 +57,7 @@ int main(int argc, char **argv)
     trk[0].preset = 0;
     fm1_ms = 100000;
     u8_input();
+    u8.boot_ms = 1;                               /* (long after power-on: no version shown) */
     u8_draw();
     c = u8t_px(10, 2);
     u8t_ok((c >> 16) < 60 && (c & 255u) > (c >> 16), "the sky at the top is dark purple");
@@ -69,7 +70,35 @@ int main(int argc, char **argv)
     u8t_ok(white > 40, "the program's name is drawn in white at the top");
     rows = host_blit_rows;
     u8_draw();
-    u8t_ok(host_blit_rows == rows, "nothing changed: nothing drawn");
+    u8t_ok(host_blit_rows == rows, "nothing changed: nothing drawn (but the stars)");
+    {                                             /* 6 s of frames: the stars twinkle, nothing else is touched */
+        static uint16_t before[240 * 240];
+        uint32_t k, t, changed = 0, other = 0, tw = 0, still = 0, steps = 0;
+        memcpy(before, host_screen, sizeof before);
+        for (k = 0; k < U8_NSTAR; k++) {
+            tw += !(u8.st[k].still & 1u);
+            still += u8.st[k].still & 1u;
+        }
+        for (t = 0; t < 6000u; t += 16u) {
+            uint32_t lv[U8_NSTAR];
+            for (k = 0; k < U8_NSTAR; k++) lv[k] = u8.st[k].lvl;
+            fm1_ms += 16u;
+            u8_draw();
+            for (k = 0; k < U8_NSTAR; k++) steps += lv[k] != u8.st[k].lvl;
+        }
+        for (k = 0; k < 240u * 240u; k++)
+            if (host_screen[k] != before[k]) {
+                uint32_t j, star = 0;
+                changed++;
+                for (j = 0; j < U8_NSTAR; j++) star |= u8.st[j].x == k % 240u && u8.st[j].y == k / 240u;
+                other += !star;
+            }
+        printf("  %u stars twinkle, %u stay still (under the text or the sun); %u steps of brightness in 6 s\n", tw, still, steps);
+        u8t_ok(steps > tw && other == 0 && host_blit_rows == rows, "the stars twinkle, and nothing but the stars changes");
+        u8t_ok(still > 0 && still < U8_NSTAR / 2u, "the stars under the text stay still, most twinkle");
+        fm1_ms = 100000;
+        rows = host_blit_rows;
+    }
     u8t_turn(EN_PRESET, 1);
     u8t_ok(trk[0].preset == 1, "PRESETS clockwise: the next program");
     u8_draw();
