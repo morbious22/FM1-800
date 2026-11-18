@@ -19,7 +19,7 @@
  * KNOB 1: the tuning, -50 .. +50 cents. Each half of the screen is drawn again only when what it shows changes.
  * Step 7c, the effects: FX goes to the PHASER page and back (the echo's page will sit between). The phaser is one
  * setting for every program, as a pedal on the floor: SELECT clockwise switches it on, anticlockwise off; KNOB 1..4
- * RATE, DEPTH, FEEDBACK, MIX (0..10); GLO + KNOB 1 its STAGES (2..12). Then the ECHO page (echo800.c, the tape
+ * RATE, DEPTH, FEEDBACK, MIX (0..10); GLO + KNOB 1 its STAGES (2..12); off at power-on. Then the ECHO page (echo800.c, the tape
  * echo, off at power-on): SELECT on / off, KNOB 1..4 DELAY (shown in ms), REPEAT, BALANCE, INPUT (0 / 20 / 40 dB).
  * FX is lit while either is on.
  * The lights (u8_leds, in place of Felucca's ui_leds): every button and key glows dim, FX lit with the phaser on, OCT-
@@ -413,10 +413,12 @@ static void u8_input(void)
     (void)fm1_input_note_edges();                /* (the keys play from seq.c: their edges are nobody's here) */
     if (!u8.boot_ms)
         u8.boot_ms = fm1_ms | 1u;
-    if (!ue.ph_set) {                            /* the phaser: on, at the page's MIX (as the Poly-800 sound opens) */
+    if (!ue.ph_set) {                            /* the phaser: off at power-on (the Poly-800 as it was: no phaser,
+                                                  * no echo, only each program's own chorus), ready at the page's MIX */
         ue.ph_set = 1;
-        ue.ph_on = p8.set[P800_PH_MIX] > 0;
-        ue.ph_mix = (uint8_t)(ue.ph_on ? p8.set[P800_PH_MIX] : P800_SET_DEF[P800_PH_MIX]);
+        ue.ph_on = 0;
+        ue.ph_mix = (uint8_t)(p8.set[P800_PH_MIX] > 0 ? p8.set[P800_PH_MIX] : P800_SET_DEF[P800_PH_MIX]);
+        p800_set(P800_PH_MIX, 0);
     }
     song.grid = 0;                               /* the keys play */
     if ((pressed >> panel.btn[B_FX]) & 1u) {     /* FX: the PHASER page, the ECHO page, and back */

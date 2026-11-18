@@ -215,9 +215,12 @@ int main(int argc, char **argv)
     {                                             /* step 7c: FX, the PHASER page, the lights */
         uint32_t sel0 = ue.sel, co0 = u8_get(ue.sel);
         uint8_t lit[FM1_NCOL];
-        u8t_ok(ue.ph_on && p8.set[P800_PH_MIX] == 5, "at power-on the phaser is on, at the page's MIX 5");
+        u8t_ok(!ue.ph_on && p8.set[P800_PH_MIX] == 0 && ue.ph_mix == 5 && !ec.on,
+               "at power-on the phaser and the echo are off (the Poly-800 as it was), the phaser ready at MIX 5");
         u8t_tap(B_FX);
         u8t_ok(ue.page == PG_PHASER, "FX: the PHASER page");
+        u8t_turn(EN_SELECT, 1);
+        u8t_ok(ue.ph_on && p8.set[P800_PH_MIX] == 5, "SELECT clockwise: the phaser on, at MIX 5");
         u8_draw();
         snprintf(path, sizeof path, "%s/phaser.ppm", out);
         u8t_dump(path);

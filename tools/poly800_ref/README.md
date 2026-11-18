@@ -154,7 +154,7 @@ note brighter, the tuning, and that PRESETS leaves the edits.
 
 **The FX button (step 7c, v0.6.0).** FX goes to the PHASER page and back. The phaser is one setting for every
 program, as a pedal on the floor: SELECT clockwise on, anticlockwise off (its MIX kept); KNOB 1..4 RATE, DEPTH,
-FEEDBACK, MIX (0..10), GLO + KNOB 1 STAGES (2..12). At power-on it is on at the page's settings. The lights are
+FEEDBACK, MIX (0..10), GLO + KNOB 1 STAGES (2..12). At power-on it is off (v0.8.1: the Poly-800 as it was, only each program's chorus), ready at the page's settings. The lights are
 `ui800.c u8_leds`: the buttons and keys glow dim, FX lit while the phaser is on, OCT- / OCT+ lit when the keys are
 moved, a key lit while held.
 
