@@ -19,7 +19,9 @@
  * KNOB 1: the tuning, -50 .. +50 cents. Each half of the screen is drawn again only when what it shows changes.
  * Step 7c, the effects: FX goes to the PHASER page and back (the echo's page will sit between). The phaser is one
  * setting for every program, as a pedal on the floor: SELECT clockwise switches it on, anticlockwise off; KNOB 1..4
- * RATE, DEPTH, FEEDBACK, MIX (0..10); GLO + KNOB 1 its STAGES (2..12). FX is lit while it is on.
+ * RATE, DEPTH, FEEDBACK, MIX (0..10); GLO + KNOB 1 its STAGES (2..12). Then the ECHO page (echo800.c, the tape
+ * echo, off at power-on): SELECT on / off, KNOB 1..4 DELAY (shown in ms), REPEAT, BALANCE, INPUT (0 / 20 / 40 dB).
+ * FX is lit while either is on.
  * The lights (u8_leds, in place of Felucca's ui_leds): every button and key glows dim, FX lit with the phaser on, OCT-
  * / OCT+ lit when the keys are moved down / up, a key lit while it is held. Every other control does nothing. */
 
@@ -238,7 +240,7 @@ static const u8_par_t U8_PAR[] = {
 static p800_prog_t u8_ed;                        /* the program being edited (a copy: the 64 stay as they are); the
                                                   * Poly-800 plays it while p8.pg points here. A new program: gone */
 enum { UV_NONE, UV_PAR, UV_TUNE };
-enum { PG_HOME, PG_PHASER };
+enum { PG_HOME, PG_PHASER, PG_ECHO };
 static struct { uint8_t sel, view, prog, page, ph_on, ph_set, ph_mix; } ue;   /* .. the page; the phaser on, its MIX
                                                   * (p8.set's is 0 while it is off), read once from the defaults */   /* the parameter SELECT is on, what the lower half shows, the program
                                                   * the edits belong to */
@@ -284,7 +286,10 @@ static uint32_t u8_sig_bot(void)
 {
     uint32_t sig = 7u + (uint32_t)(song.octave + 3) * 3u + (uint32_t)ue.ph_on * 31u +
                    (uint32_t)(fm1_ms - u8.boot_ms < 4000u) * 61u + ue.view * 131u + ue.page * 977u;
-    if (ue.page == PG_PHASER)
+    sig += (uint32_t)ec.on * 49999u;
+    if (ue.page == PG_ECHO)
+        sig += ec.delay * 11u + ec.repeat * 1201u + ec.balance * 13001u + ec.drive * 150001u;
+    else if (ue.page == PG_PHASER)
         sig += (uint32_t)p8.set[P800_PH_STAGES] * 11u + (uint32_t)p8.set[P800_PH_RATE] * 101u +
                (uint32_t)p8.set[P800_PH_DEPTH] * 1103u + (uint32_t)p8.set[P800_PH_FB] * 12011u + ue.ph_mix * 130003u;
     else
@@ -343,6 +348,27 @@ static void u8_draw(void)
                 u8_text(cx - text_w(&AF_S, L[c]) / 2, 186, &AF_S, L[c], u8_rgb(255, 170, 230));
                 u8_text(cx - text_w(&AF_M, v) / 2, 199, &AF_M, v, u8_rgb(255, 255, 255));
             }
+        } else if (ue.page == PG_ECHO) {         /* the echo: on / off, KNOB 1..4's values in four columns */
+            static const char *const L[4] = {"DELAY", "REPEAT", "BALANCE", "INPUT"};
+            static const char *const IN[3] = {"0 dB", "20 dB", "40 dB"};
+            uint32_t c;
+            u8_text(10, 152, &AF_S, "TAPE ECHO", u8_rgb(255, 170, 230));
+            u8_text(230 - text_w(&AF_L, ec.on ? "ON" : "OFF"), 148, &AF_L, ec.on ? "ON" : "OFF",
+                    ec.on ? u8_rgb(120, 240, 255) : u8_rgb(150, 120, 170));
+            for (c = 0; c < 4u; c++) {
+                int32_t cx = 30 + 60 * (int32_t)c;
+                if (c == 0u) {
+                    fmt_int(v, (int32_t)((EC_DELAY[ec.delay] * 10u + 220u) / 441u));
+                    str_cpy(v + str_len(v), " ms", sizeof v - str_len(v));
+                } else if (c == 3u) {
+                    str_cpy(v, IN[ec.drive], sizeof v);
+                } else {
+                    fmt_int(v, c == 1u ? ec.repeat : ec.balance);
+                }
+                u8_text(cx - text_w(&AF_S, L[c]) / 2, 186, &AF_S, L[c], u8_rgb(255, 170, 230));
+                u8_text(cx - text_w(c == 0u || c == 3u ? &AF_S : &AF_M, v) / 2, c == 0u || c == 3u ? 202 : 199,
+                        c == 0u || c == 3u ? &AF_S : &AF_M, v, u8_rgb(255, 255, 255));
+            }
         } else if (ue.view == UV_PAR) {          /* the parameter: its section, its name, its value */
             u8_val(v, ue.sel, u8_get(ue.sel));
             u8_text(10, 164, &AF_S, U8_PAR[ue.sel].sec, u8_rgb(255, 170, 230));
@@ -360,8 +386,11 @@ static void u8_draw(void)
                     u8_rgb(255, 255, 255));
         }
         u8_text(10, 220, &AF_S, o, u8_rgb(120, 240, 255));
-        if (ue.ph_on && ue.page == PG_HOME)
-            u8_text(230 - text_w(&AF_S, "PHASER"), 220, &AF_S, "PHASER", u8_rgb(255, 170, 230));
+        if (ue.page == PG_HOME) {                /* the effects that are on */
+            const char *fx = ue.ph_on && ec.on ? "PHASER  ECHO" : ue.ph_on ? "PHASER" : ec.on ? "ECHO" : "";
+            if (*fx)
+                u8_text(230 - text_w(&AF_S, fx), 220, &AF_S, fx, u8_rgb(255, 170, 230));
+        }
         if (!y0) {                               /* the stars the text covers (all lie in this strip) stay still */
             uint32_t i;
             for (i = 0; i < U8_NSTAR; i++) {
@@ -390,8 +419,8 @@ static void u8_input(void)
         ue.ph_mix = (uint8_t)(ue.ph_on ? p8.set[P800_PH_MIX] : P800_SET_DEF[P800_PH_MIX]);
     }
     song.grid = 0;                               /* the keys play */
-    if ((pressed >> panel.btn[B_FX]) & 1u) {     /* FX: the PHASER page and back */
-        ue.page = ue.page == PG_PHASER ? PG_HOME : PG_PHASER;
+    if ((pressed >> panel.btn[B_FX]) & 1u) {     /* FX: the PHASER page, the ECHO page, and back */
+        ue.page = ue.page == PG_HOME ? PG_PHASER : ue.page == PG_PHASER ? PG_ECHO : PG_HOME;
         if (ue.view == UV_TUNE) ue.view = UV_PAR;
     }
     if ((s = panel_enc(EN_PRESET)) != 0) {       /* PRESETS: the program, round the 64 (its edits gone) */
@@ -417,6 +446,16 @@ static void u8_input(void)
                     p800_set(id, v);
             }
         p800_set(P800_PH_MIX, ue.ph_on ? ue.ph_mix : 0);
+        (void)panel_enc(EN_ALGO);
+    } else if (ue.page == PG_ECHO) {             /* the echo's page: SELECT on / off, KNOB 1..4 */
+        if ((s = panel_enc(EN_SELECT)) != 0)
+            ec.on = s > 0;
+        for (k = 0; k < 4u; k++)
+            if ((s = panel_enc(EN_K1 + k)) != 0) {
+                uint8_t *c = k == 0u ? &ec.delay : k == 1u ? &ec.repeat : k == 2u ? &ec.balance : &ec.drive;
+                int32_t mx = k == 0u ? 99 : k == 3u ? 2 : 10, v = (int32_t)*c + s;
+                *c = (uint8_t)(v < 0 ? 0 : v > mx ? mx : v);
+            }
         (void)panel_enc(EN_ALGO);
     } else {
     if ((s = panel_enc(EN_SELECT)) != 0) {       /* SELECT: the parameter (held at the first and last) */
@@ -468,7 +507,7 @@ static void u8_leds(void)
         led_put(nd, 14u + k, 1);
         led_put(nl, 14u + k, (int)((held >> k) & 1u));
     }
-    led_put(nl, panel.btn[B_FX], ue.ph_on);
+    led_put(nl, panel.btn[B_FX], ue.ph_on || ec.on);
     led_put(nl, panel.btn[B_OCTDN], song.octave < 0);
     led_put(nl, panel.btn[B_OCTUP], song.octave > 0);
     fm1_led_dim_level(settings_leds == LEDS_DIM_LO);

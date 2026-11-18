@@ -1070,6 +1070,7 @@ static uint32_t mix_split(void)
  * sends every part's notes to it), then only the Poly-800 (eng_p800.c), MASTER, and the output stage (master_out:
  * DC block, the speaker's LOW CUT, the limiter, the knee). Felucca's parts, the second core's share and the FX buses
  * are not run: they have nothing to play. The scale is Felucca's: the mix's >> 2 x MASTER (Q12) */
+#include "echo800.c"                     /* the tape echo */
 static void mix_block(int32_t *out, uint32_t n)
 {
     uint32_t i;
@@ -1078,6 +1079,7 @@ static void mix_block(int32_t *out, uint32_t n)
         mix_l[i] = mix_r[i] = 0;
     events_block(n);
     p8e_mix(mix_l, mix_r, n);
+    echo_block(mix_l, mix_r, n);
     for (i = 0; i < n; i++) {
         int32_t l = ((mix_l[i] >> 2) * mg) >> 10;
         int32_t r = ((mix_r[i] >> 2) * mg) >> 10;

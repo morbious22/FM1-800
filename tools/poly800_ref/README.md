@@ -166,3 +166,18 @@ stage at one pitch (Q .7), swept about 1 kHz +- 3 octaves at DEPTH 10 (125 Hz ..
 RATE 2, DEPTH 10, FEEDBACK 7, MIX 10: the bands from 200 Hz to 6 kHz move 19.0 dB (median; the page's 14.2) and the
 two sides are far less alike (correlation +0.39, the page's +0.80). The tests that hold the firmware to the page play
 the page's phaser (`P800_PH_DEEP` 0: `host.c`), and still pass as before.
+
+## The tape echo (v0.8.0, by ear)
+
+`firmware/src/echo800.c`, after the Poly-800 in the FM-1's mix (`fx.c mix_block`), on Felucca's delay line (`dly_buf`,
+1.49 s, unused in this build). The controls of a small 1970s tape echo, on the ECHO page after PHASER on the FX
+button: SELECT on / off (off at power-on), KNOB 1 DELAY (0..99: 40 ms .. 1 s, shown in ms), KNOB 2 REPEAT (0..10:
+up to 1.08, at the top it runs away slowly), KNOB 3 BALANCE (0 dry .. 5 both full .. 10 the echo alone), KNOB 4
+INPUT 0 / 20 / 40 dB (the input x1 / x3 / x9 before the tape, as a unit's input stage: louder and more driven; the
+repeats go round without it). Mono, into both sides. The tape saturates (tanh, never past its full level); each
+repeat goes through a ~2 kHz low-pass and a ~110 Hz high-pass (darker and thinner each time round); the tape wavers
+(~0.6 Hz wow, ~7 Hz flutter, +-0.2 %) and is read between samples; DELAY slides the tape's speed (~90 ms), so the
+repeats bend. The filters' state is 8 bits finer than the tape: what is left of a repeat dies to exactly 0, and once
+the echo is off and the tape quiet for 1.5 s it costs nothing. 32-bit arithmetic only (CPU.md).
+`in_felucca.c` checks DELAY's range, the repeats' times, that each is softer and darker, the INPUT switch on a quiet
+and a loud sound, REPEAT 10 held by the saturation, and that off it dies away and rests; `ui800_test.c` the page.

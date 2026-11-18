@@ -248,7 +248,25 @@ int main(int argc, char **argv)
         u8t_ok(!((fm1_led[led_pos[panel.btn[B_FX]] >> 3] >> (led_pos[panel.btn[B_FX]] & 7u)) & 1u), "and dark when it is off");
         u8t_turn(EN_SELECT, 1);
         u8t_tap(B_FX);
+        u8t_ok(ue.page == PG_ECHO && !ec.on, "FX again: the ECHO page (the echo off at power-on)");
+        u8t_turn(EN_SELECT, 1);
+        u8t_ok(ec.on, "SELECT clockwise: the echo on");
+        u8t_turn(EN_K1, -10), u8t_turn(EN_K2, 2), u8t_turn(EN_K3, 1), u8t_turn(EN_K4, 5);
+        u8t_ok(ec.delay == 40 && ec.repeat == 6 && ec.balance == 5 && ec.drive == 2,
+               "KNOB 1..4: DELAY 40, REPEAT 6, BALANCE 5, INPUT 40 dB (held at its last)");
+        u8t_ok(p8.set[P800_PH_RATE] == 7 && ue.ph_on, "the phaser as it was set");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/echo.ppm", out);
+        u8t_dump(path);
+        u8t_turn(EN_SELECT, -1);
+        u8_leds();
+        u8t_ok(((fm1_led[led_pos[panel.btn[B_FX]] >> 3] >> (led_pos[panel.btn[B_FX]] & 7u)) & 1u), "FX still lit (the phaser is on)");
+        u8t_turn(EN_SELECT, 1);
+        u8t_tap(B_FX);
         u8t_ok(ue.page == PG_HOME, "FX again: home");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/home_fx.ppm", out);
+        u8t_dump(path);
         u8t_turn(EN_K1, 1);
         u8t_ok(u8_get(ue.sel) == co0 + 1u || u8_get(ue.sel) == U8_PAR[ue.sel].max, "home: KNOB 1 edits the program again");
     }
