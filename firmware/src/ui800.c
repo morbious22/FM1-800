@@ -15,7 +15,7 @@
  * Step 7b, editing as on the Poly-800: SELECT steps through the program's parameters (the page's order: DCO 1, DCO 2,
  * noise, VCF, DEG 1..3, MG, chorus, voices; its first turn shows the one it is on), KNOB 1 sets its value and it sounds
  * at once; the lower half shows the section, the parameter and its value, the top "EDITED". The edits go into a copy
- * of the program (u8_ed), which the Poly-800 plays; turning PRESETS leaves them (saving them: step 8). GLO held +
+ * of the program (u8_ed), which the Poly-800 plays; turning PRESETS leaves them (unless saved). GLO held +
  * KNOB 1: the tuning, -50 .. +50 cents. Each half of the screen is drawn again only when what it shows changes.
  * Step 7c, the effects: FX goes to the PHASER page and back (the echo's page will sit between). The phaser is one
  * setting for every program, as a pedal on the floor: SELECT clockwise switches it on, anticlockwise off; KNOB 1..4
@@ -35,7 +35,7 @@
 #define U8_NSTAR 40
 
 static struct {
-    uint8_t ok;                                  /* drawn at least once */
+    uint8_t ok, booted;                          /* drawn at least once; boot_ms set */
     uint32_t boot_ms;                            /* the version shows for 4 s after power-on */
     struct { uint8_t x, y, lvl, still; uint16_t per, ph; } st[U8_NSTAR];   /* the stars: place, brightness step drawn
                                                   * (0..3), under the text, cycle and phase (ms) */
@@ -240,15 +240,55 @@ static const u8_par_t U8_PAR[] = {
 };
 #define U8_NPAR (sizeof U8_PAR / sizeof U8_PAR[0])
 
-static p800_prog_t u8_ed;                        /* the program being edited (a copy: the 64 stay as they are); the
+static p800_prog_t u8_ed;                        /* the program playing: its slot's, read from flash (prog800.c), edited
+                                                  * here; the
                                                   * Poly-800 plays it while p8.pg points here. A new program: gone */
 enum { UV_NONE, UV_PAR, UV_TUNE, UV_HP };
 enum { PG_HOME, PG_PHASER, PG_ECHO };
-static struct { uint8_t sel, view, prog, page, ph_on, ph_set, ph_mix; } ue;   /* .. the page; the phaser on, its MIX
+static struct {
+    uint8_t sel, view, prog, page, ph_on, ph_set, ph_mix;
+    uint8_t slot, edited, loaded;                /* step 8: the slot playing (0..63 bank A, 64..127 bank B), edited
+                                                  * since it was loaded or saved, the first load done */
+    uint8_t save, dest;                          /* SAVE: what it is asking (U8S_*), the slot it would write */
+    char dest_name[24];                          /* .. the name of what is in it now */
+    const char *msg;                             /* a word for a moment (SAVED, RESTORED, ..) */
+    uint32_t msg_ms;
+} ue;
+enum { U8S_NONE, U8S_SAVE, U8S_RESTORE, U8S_RESTORE_A };
+/* prog800.c (after storage.c): the programs and the global settings in flash */
+static void p8s_get(uint32_t slot, p800_prog_t *g);
+static int p8s_put(uint32_t slot, const p800_prog_t *g);
+static int p8s_restore_a(void);
+static void p8s_factory(uint32_t slot, p800_prog_t *g);
+static uint32_t p8g_boot(void);
+static void p8g_poll(void);   /* .. the page; the phaser on, its MIX
                                                   * (p8.set's is 0 while it is off), read once from the defaults */   /* the parameter SELECT is on, what the lower half shows, the program
                                                   * the edits belong to */
 
-static int u8_edited(void) { return p8.pg == &u8_ed; }
+static int u8_edited(void) { return ue.edited; }
+
+/* the slot's program, playing: from flash (or its factory program), into u8_ed; the Poly-800 points at it. Part 1's
+ * preset follows (bank A's index, p8e_prog first: eng_p800.c p8e_mix never loads over it) */
+static void u8_load(uint32_t slot)
+{
+    slot %= 128u;
+    p8s_get(slot, &u8_ed);
+    ue.slot = (uint8_t)slot, ue.edited = 0, ue.loaded = 1;
+    p8.pg = &u8_ed;
+    p800_apply();
+    p8e_prog = (uint8_t)(slot & 63u);
+    trk[0].preset = (uint8_t)(slot & 63u);
+}
+
+static void u8_say(const char *m) { ue.msg = m, ue.msg_ms = fm1_ms; }   /* (ue.msg marks it set: the time as it is,
+                                                  * never one ahead, or the 1.5 s would wrap round to gone) */
+
+/* "A 11": the slot's bank and number */
+static void u8_slot_txt(char *b, uint32_t slot)
+{
+    uint32_t n = (slot % 64u / 8u + 1u) * 10u + slot % 8u + 1u;
+    b[0] = slot < 64u ? 'A' : 'B', b[1] = (char)('0' + n / 10u), b[2] = (char)('0' + n % 10u), b[3] = 0;
+}
 static uint32_t u8_get(uint32_t k) { return ((const uint8_t *)p8.pg)[U8_PAR[k].off]; }
 
 /* the value's words: a number, or what the setting is called */
@@ -270,11 +310,8 @@ static void u8_edit(uint32_t k, int32_t s)
     int32_t v = (int32_t)u8_get(k) + s;
     if (v < 0) v = 0;
     if (v > U8_PAR[k].max) v = U8_PAR[k].max;
-    if (!u8_edited()) {
-        u8_ed = *p8.pg;
-        p8.pg = &u8_ed;                          /* (one store: the audio reads the copy from the next block) */
-    }
     ((uint8_t *)&u8_ed)[U8_PAR[k].off] = (uint8_t)v;
+    ue.edited = 1;
     p800_apply();                                /* (the cutoff's base, key tracking) */
 }
 
@@ -282,12 +319,14 @@ static void u8_edit(uint32_t k, int32_t s)
  * each a signature; a half is drawn again only when its signature changes */
 static uint32_t u8_sig_top(void)
 {
-    const p800_prog_t *g = p8.pg && ue.prog == trk[0].preset ? p8.pg : &P800_PROGS[trk[0].preset % P800_NPROG];
-    return 1u + trk[0].preset + (uint32_t)g->mode * 101u + (uint32_t)u8_edited() * 211u;
+    return 1u + ue.slot + (uint32_t)u8_ed.mode * 131u + (uint32_t)u8_edited() * 211u + str_len(u8_ed.name) * 7001u +
+           (uint32_t)(uint8_t)u8_ed.name[0] * 60013u;
 }
 static uint32_t u8_sig_bot(void)
 {
-    uint32_t sig = 7u + (uint32_t)(song.octave + 3) * 3u + (uint32_t)ue.ph_on * 31u +
+    uint32_t sig = 7u + ue.save * 900007u + ue.dest * 7907u + (uint32_t)(ue.msg != 0 && !ue.save) * 5003u +
+                   (uint32_t)(ue.msg ? (uintptr_t)ue.msg & 0xFFFFu : 0u) * 17u + (uint32_t)ue.edited * 13u +
+                   (uint32_t)(song.octave + 3) * 3u + (uint32_t)ue.ph_on * 31u +
                    (uint32_t)(fm1_ms - u8.boot_ms < 4000u) * 61u + ue.view * 131u + ue.page * 977u;
     sig += (uint32_t)ec.on * 49999u;
     if (ue.page == PG_ECHO)
@@ -309,9 +348,12 @@ static uint32_t u8_sig_bot(void)
 static void u8_draw(void)
 {
     static uint32_t top, bot;
-    const p800_prog_t *g = u8_edited() ? p8.pg : &P800_PROGS[trk[0].preset % P800_NPROG];
+    const p800_prog_t *g = &u8_ed;
+    if (!ue.loaded && !u8_ed.name[0])            /* (the first frame, at power-on before the flash is read: A11's
+                                                  * factory name, not a blank; u8_input loads the real one) */
+        p8s_factory(0, &u8_ed);
     uint32_t st = u8_sig_top(), sb = u8_sig_bot(), y0;
-    char num[4], o[8], v[12], tn[8];
+    char num[6], o[8], v[12], tn[8];
     const aafont_t *nf;
     int32_t nx;
     if (u8.ok && st == top && sb == bot) {
@@ -319,7 +361,7 @@ static void u8_draw(void)
         return;
     }
     u8_stars();
-    num[0] = (char)('0' + g->num / 10u), num[1] = (char)('0' + g->num % 10u), num[2] = 0;
+    u8_slot_txt(num, ue.slot);                   /* "A11" */
     str_cpy(o, "OCT ", sizeof o);
     if (song.octave > 0) str_cpy(o + 4, "+", sizeof o - 4);
     fmt_int(o + str_len(o), song.octave);
@@ -335,9 +377,29 @@ static void u8_draw(void)
         u8_text(10, 6, &AF_L, num, u8_rgb(120, 240, 255));
         u8_text(nx, 9, nf, g->name, u8_rgb(255, 255, 255));
         u8_text(nx, 29, &AF_S, g->mode ? "DOUBLE" : "WHOLE", u8_rgb(255, 170, 230));
-        if (u8_edited())                         /* (not what is stored: SAVE comes with step 8) */
+        if (u8_edited())                         /* (not what is stored: SAVE keeps it) */
             u8_text(nx + text_w(&AF_S, g->mode ? "DOUBLE" : "WHOLE") + 10, 29, &AF_S, "EDITED", u8_rgb(255, 230, 120));
-        if (ue.view == UV_HP) {                  /* GLO held: the high-pass (FM1_HP) */
+        if (ue.save || ue.msg) {                 /* SAVE asking, or a word after it */
+            char d[6];
+            if (!ue.save) {                      /* (a question always over a word left from before) */
+                u8_text(120 - text_w(&AF_L, ue.msg) / 2, 168, &AF_L, ue.msg, u8_rgb(255, 230, 120));
+            } else {
+                u8_text(10, 152, &AF_S, ue.save == U8S_SAVE ? "SAVE TO" : ue.save == U8S_RESTORE ? "RESTORE TO FACTORY"
+                                                                                                   : "RESTORE BANK A",
+                        u8_rgb(255, 170, 230));
+                if (ue.save == U8S_RESTORE_A) {
+                    u8_text(10, 168, &AF_M, "ALL 64 FACTORY PROGRAMS", u8_rgb(255, 255, 255));
+                    u8_text(10, 186, &AF_S, "(BANK B IS KEPT)", u8_rgb(255, 170, 230));
+                } else {
+                    u8_slot_txt(d, ue.dest);
+                    u8_text(10, 166, &AF_L, d, u8_rgb(120, 240, 255));
+                    u8_text(14 + text_w(&AF_L, d) + 6, 172, text_w(&AF_M, ue.dest_name) <= 150 ? &AF_M : &AF_S,
+                            ue.dest_name, u8_rgb(255, 255, 255));
+                }
+                u8_text(10, 202, &AF_S, ue.save == U8S_SAVE ? "SAVE: YES   PRESETS: WHERE   OTHER: NO"
+                                                            : "SAVE: YES   OTHER: NO", u8_rgb(255, 230, 120));
+            }
+        } else if (ue.view == UV_HP) {           /* GLO held: the high-pass (FM1_HP) */
             u8_text(10, 152, &AF_S, "HIGH-PASS", u8_rgb(255, 170, 230));
             u8_text(230 - text_w(&AF_L, p8.set[P800_HP_ON] ? "ON" : "OFF"), 148, &AF_L, p8.set[P800_HP_ON] ? "ON" : "OFF",
                     p8.set[P800_HP_ON] ? u8_rgb(120, 240, 255) : u8_rgb(150, 120, 170));
@@ -435,8 +497,8 @@ static void u8_input(void)
     uint32_t glo = (fm1_in.buttons >> panel.btn[B_GLO]) & 1u;
     int32_t s;
     (void)fm1_input_note_edges();                /* (the keys play from seq.c: their edges are nobody's here) */
-    if (!u8.boot_ms)
-        u8.boot_ms = fm1_ms | 1u;
+    if (!u8.booted)                              /* (the time as it is: one ahead, the 4 s would wrap round) */
+        u8.booted = 1, u8.boot_ms = fm1_ms;
     if (!ue.ph_set) {                            /* the phaser: off at power-on (the Poly-800 as it was: no phaser,
                                                   * no echo, only each program's own chorus), ready at the page's MIX */
         ue.ph_set = 1;
@@ -444,16 +506,75 @@ static void u8_input(void)
         ue.ph_mix = (uint8_t)(p8.set[P800_PH_MIX] > 0 ? p8.set[P800_PH_MIX] : P800_SET_DEF[P800_PH_MIX]);
         p800_set(P800_PH_MIX, 0);
     }
+    if (!ue.loaded) {                            /* power-on: the settings and the program last chosen (prog800.c);
+                                                  * SAVE held: the factory restore of bank A is offered */
+        u8_load(p8g_boot());
+        if ((fm1_in.buttons >> panel.btn[B_SAVE]) & 1u)
+            ue.save = U8S_RESTORE_A;
+        pressed &= ~(1u << panel.btn[B_SAVE]);   /* (that press is the one held through power-on) */
+    }
+    if (ue.msg && fm1_ms - ue.msg_ms > 1500u)    /* a word stays 1.5 s */
+        ue.msg = 0;
+    p8g_poll();
     song.grid = 0;                               /* the keys play */
+    if (ue.save) {                               /* SAVE asking: SAVE again does it, PRESETS picks where (SAVE TO),
+                                                  * any other button: no. The knobs do nothing meanwhile */
+        uint32_t other = pressed & ~((1u << panel.btn[B_SAVE]) | (1u << panel.btn[B_GLO]));
+        if (ue.save == U8S_SAVE && (s = panel_enc(EN_PRESET)) != 0) {
+            int32_t d = ((int32_t)ue.dest + s) % 128;
+            p800_prog_t there;
+            ue.dest = (uint8_t)(d < 0 ? d + 128 : d);
+            p8s_get(ue.dest, &there);
+            str_cpy(ue.dest_name, there.name, sizeof ue.dest_name);
+        }
+        for (k = 0; k < NE; k++)
+            (void)panel_enc(k);
+        if ((pressed >> panel.btn[B_SAVE]) & 1u) {
+            int rc;
+            if (ue.save == U8S_SAVE) {
+                rc = p8s_put(ue.dest, &u8_ed);
+                if (!rc) ue.slot = ue.dest, ue.edited = 0, trk[0].preset = p8e_prog = (uint8_t)(ue.dest & 63u);
+                u8_say(rc ? "SAVE FAILED" : "SAVED");
+            } else if (ue.save == U8S_RESTORE) {
+                p800_prog_t f;
+                p8s_factory(ue.dest, &f);
+                rc = p8s_put(ue.dest, &f);
+                if (!rc) u8_load(ue.dest);
+                u8_say(rc ? "RESTORE FAILED" : "RESTORED");
+            } else {
+                rc = p8s_restore_a();
+                if (!rc) u8_load(ue.slot);
+                u8_say(rc ? "RESTORE FAILED" : "BANK A RESTORED");
+            }
+            ue.save = U8S_NONE;
+        } else if (other) {
+            ue.save = U8S_NONE;
+            u8_say("NOT SAVED");
+        }
+        (void)fm1_input_note_edges();
+        return;
+    }
+    if ((pressed >> panel.btn[B_SAVE]) & 1u) {   /* SAVE: to this slot, or (PRESETS) another; GLO + SAVE: this slot
+                                                  * back to its factory program */
+        p800_prog_t there;
+        ue.save = glo ? U8S_RESTORE : U8S_SAVE;
+        ue.dest = ue.slot;
+        p8s_get(ue.dest, &there);
+        str_cpy(ue.dest_name, glo ? there.name : u8_ed.name, sizeof ue.dest_name);
+        if (glo) {
+            p8s_factory(ue.dest, &there);
+            str_cpy(ue.dest_name, there.name, sizeof ue.dest_name);
+        }
+        return;
+    }
     if ((pressed >> panel.btn[B_FX]) & 1u) {     /* FX: the PHASER page, the ECHO page, and back */
         ue.page = ue.page == PG_HOME ? PG_PHASER : ue.page == PG_PHASER ? PG_ECHO : PG_HOME;
         if (ue.view == UV_TUNE) ue.view = UV_PAR;
     }
-    if ((s = panel_enc(EN_PRESET)) != 0) {       /* PRESETS: the program, round the 64 (its edits gone) */
-        int32_t p = ((int32_t)trk[0].preset + s) % (int32_t)P800_NPROG;
-        trk[0].preset = (uint8_t)(p < 0 ? p + (int32_t)P800_NPROG : p);
-        p800_program(trk[0].preset);             /* (now, not at the next block: the screen shows it at once) */
-        p8e_prog = trk[0].preset;
+    if ((s = panel_enc(EN_PRESET)) != 0) {       /* PRESETS: the program, round the 128 (A11..A88, B11..B88; its
+                                                  * edits gone); GLO + PRESETS: the other bank's same number */
+        int32_t p = ((int32_t)ue.slot + (glo ? s * 64 : s)) % 128;
+        u8_load((uint32_t)(p < 0 ? p + 128 : p));
         ue.view = UV_NONE;                       /* (the program alone; SELECT keeps its place) */
     }
     ue.prog = trk[0].preset;

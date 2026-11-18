@@ -3,13 +3,23 @@
 /* FM1-800 step 7a: the Poly-800's home screen and controls (firmware/src/ui800.c) on tests/ui_test.c's stubs.
  *   - the screen: the scene (sky, sun, grid where they belong), the program's number and name on it, drawn only
  *     when something on it changes
- *   - PRESETS: the next / previous program, round the 64; the program that plays follows (eng_p800.c)
+ *   - PRESETS: the next / previous program, round the 128 (banks A and B); the program that plays follows
+ *   - step 8 (prog800.c, on a flash held in RAM): SAVE, SAVE TO another slot, the restores, the global settings
  *   - OCT- / OCT+: an octave on release, -3 .. +3, both together back to 0
  * Writes OUT/home_<n>.ppm for a few programs (to look at).
  *   cc -O1 -w -DFM1_800=1 [the include paths] -Itests -o ui800_test tests/poly800/ui800_test.c -lm; ./ui800_test OUT */
 #define UI_TEST_MAIN ui_test_main
 #include "ui_test.c"
 #include "../firmware/src/ui800.c"
+static uint8_t u8t_nor[0x100000];                /* the FM-1's 1 MiB of flash, erased; storage.c's hooks on it */
+static uint32_t u8t_erases;
+static int st_read(uint32_t off, void *dst, uint32_t n) { memcpy(dst, u8t_nor + off, n); return 0; }
+static int st_erase(uint32_t off) { memset(u8t_nor + off, 0xFF, 4096); u8t_erases++; return 0; }
+static int st_prog(uint32_t off, const void *src, uint32_t n) { memcpy(u8t_nor + off, src, n); return 0; }
+#undef FELUCCA_FLASH
+#define FELUCCA_FLASH 1
+#include "../firmware/src/storage.c"
+#include "../firmware/src/prog800.c"
 
 static int u8t_fails;
 static void u8t_ok(int c, const char *what)
@@ -52,12 +62,13 @@ int main(int argc, char **argv)
     const char *out = argc > 1 ? argv[1] : ".";
     printf("FM1-800 home screen (ui800.c)\n");
     ui_power_on();                                /* (ui_test.c: the panel set up, the parts at their defaults) */
+    memset(u8t_nor, 0xFF, sizeof u8t_nor);
     p800_init();
     trk[0].engine = trk[0].eng_req = ENGI_P800;
     trk[0].preset = 0;
     fm1_ms = 100000;
     u8_input();
-    u8.boot_ms = 1;                               /* (long after power-on: no version shown) */
+    u8.booted = 1, u8.boot_ms = 1;                /* (long after power-on: no version shown) */
     u8_draw();
     c = u8t_px(10, 2);
     u8t_ok((c >> 16) < 60 && (c & 255u) > (c >> 16), "the sky at the top is dark purple");
@@ -104,11 +115,11 @@ int main(int argc, char **argv)
     u8_draw();
     u8t_ok(host_blit_rows == rows + 120u, "a new program: the top half drawn again, once (the bottom has not changed)");
     u8t_turn(EN_PRESET, -2);
-    u8t_ok(trk[0].preset == P800_NPROG - 1u, "PRESETS anticlockwise from the first: the last (round the 64)");
+    u8t_ok(ue.slot == 127u && !strcmp(u8_ed.name, "INIT"), "PRESETS anticlockwise from the first: the last, B88 (INIT)");
     {
         int32_t o[2 * CTL];
         mix_block(o, CTL);
-        u8t_ok(p8.pg == &P800_PROGS[P800_NPROG - 1u], "the program shown is the program that plays");
+        u8t_ok(p8.pg == &u8_ed && u8_ed.num == 88u, "the program shown is the program that plays");
     }
     u8t_tap(B_OCTDN);
     u8t_ok(song.octave == -1, "OCT- (on release): an octave down");
@@ -125,10 +136,8 @@ int main(int argc, char **argv)
     {                                             /* step 7b: SELECT, KNOB 1, GLO + KNOB 1 */
         uint32_t co = 0, k, before_co;
         double e0, e1;
-        trk[0].preset = 0;
         song.master_q12 = 4096;                   /* (MASTER up: ui_power_on cleared it) */
-        p800_program(0);
-        p8e_prog = 0;
+        u8_load(0);
         ue.view = UV_NONE;
         ue.sel = 0;
         u8_input();
@@ -198,9 +207,10 @@ int main(int argc, char **argv)
         u8t_ok(ue.view == UV_PAR, "GLO let go: the parameter again");
         p800_set(P800_TUNE, 0);
         u8t_turn(EN_PRESET, 1);
-        u8t_ok(p8.pg == &P800_PROGS[1] && !u8_edited() && ue.view == UV_NONE, "PRESETS: the next program as stored, the edits gone");
+        u8t_ok(ue.slot == 1u && !memcmp(&u8_ed.mode, &P800_PROGS[1].mode, P8S_NV) && !u8_edited() && ue.view == UV_NONE,
+               "PRESETS: the next program as stored, the edits gone");
         u8t_turn(EN_PRESET, -1);
-        u8t_ok(p8.pg == &P800_PROGS[0] && P800_PROGS[0].co == before_co, "and back: STRINGS as it was");
+        u8t_ok(ue.slot == 0u && u8_ed.co == before_co, "and back: STRINGS as it was");
         for (k = 0; k < U8_NPAR; k++) {           /* every parameter: SELECT reaches it, KNOB 1 moves it in its range */
             uint32_t v;
             ue.sel = (uint8_t)k;
@@ -298,10 +308,8 @@ int main(int argc, char **argv)
             fm1_in.buttons &= ~g;
             u8_input();
             ue.view = UV_NONE;
-            trk[0].preset = 0;                    /* (STRINGS as stored: the walk through every parameter above left
+            u8_load(0);                           /* (STRINGS as stored: the walk through every parameter above left
                                                    * it edited, its noise at full) */
-            p800_program(0);
-            p8e_prog = 0;
             for (on = 0; on < 2u; on++) {
                 p800_set(P800_HP_ON, (int32_t)on);
                 e[on] = 0;
@@ -324,10 +332,111 @@ int main(int argc, char **argv)
 #endif
     }
     for (i = 0; i < 4u; i++) {
-        trk[0].preset = SHOW[i];
+        u8_load(SHOW[i]);
         song.octave = 0;
         u8_draw();
         snprintf(path, sizeof path, "%s/home_%u.ppm", out, P800_PROGS[SHOW[i]].num);
+        u8t_dump(path);
+    }
+    {                                             /* step 8: the programs and the settings in flash (prog800.c) */
+        uint32_t co, er, k, co_saved;
+        p800_prog_t chk;
+        ue.page = PG_HOME, ue.view = UV_NONE;
+        u8_load(0);
+        u8t_ok(!strcmp(u8_ed.name, P800_PROGS[0].name) && !memcmp(&u8_ed.mode, &P800_PROGS[0].mode, P8S_NV),
+               "nothing saved yet: A11 is the factory STRINGS");
+        for (co = 0; strcmp(U8_PAR[co].name, "CUTOFF"); co++) ;
+        ue.sel = (uint8_t)co;
+        u8t_turn(EN_K1, -30);
+        co_saved = u8_ed.co;
+        u8t_ok(u8_edited(), "an edit: EDITED");
+        u8t_tap(B_SAVE);
+        u8t_ok(ue.save == U8S_SAVE && ue.dest == 0u, "SAVE: it asks, SAVE TO A11");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/save.ppm", out);
+        u8t_dump(path);
+        er = u8t_erases;
+        u8t_tap(B_SAVE);
+        u8t_ok(!ue.save && !u8_edited() && u8t_erases == er + 1u && ue.msg && ue.msg && !strcmp(ue.msg, "SAVED"),
+               "SAVE again: written (one sector), SAVED, no longer EDITED");
+        u8t_turn(EN_PRESET, 1), u8t_turn(EN_PRESET, -1);
+        u8t_ok(ue.slot == 0u && u8_ed.co == co_saved && P800_PROGS[0].co != co_saved,
+               "away and back: A11 as saved (the factory table untouched)");
+        u8t_turn(EN_K1, 5);                       /* SAVE TO another: B11 */
+        u8t_tap(B_SAVE);
+        u8t_turn(EN_PRESET, 64);
+        u8t_ok(ue.dest == 64u && !strcmp(ue.dest_name, "INIT"), "PRESETS while asking: SAVE TO B11 (INIT there now)");
+        u8t_tap(B_SAVE);
+        u8t_ok(ue.slot == 64u && !u8_edited(), "saved to B11, which is now playing");
+        u8_load(0);
+        p8s_get(64, &chk);
+        u8t_ok(u8_ed.co == co_saved && chk.co == co_saved + 5u && !strcmp(chk.name, P800_PROGS[0].name),
+               "A11 kept as it was; B11 holds the new one, named STRINGS");
+        u8t_turn(EN_K1, 3);                       /* asked, then any other button: nothing written */
+        er = u8t_erases;
+        u8t_tap(B_SAVE);
+        u8t_tap(B_HOME);
+        u8t_ok(!ue.save && u8t_erases == er && u8_edited() && ue.msg && !strcmp(ue.msg, "NOT SAVED"), "SAVE, then another button: not saved");
+        fm1_in.buttons |= 1u << panel.btn[B_GLO];   /* GLO + SAVE: this slot back to its factory program */
+        u8t_tap(B_SAVE);
+        fm1_in.buttons &= ~(1u << panel.btn[B_GLO]);
+        u8t_ok(ue.save == U8S_RESTORE, "GLO + SAVE: it asks, RESTORE TO FACTORY");
+        u8t_tap(B_SAVE);
+        u8t_ok(ue.slot == 0u && u8_ed.co == P800_PROGS[0].co && !u8_edited() && ue.msg && !strcmp(ue.msg, "RESTORED"),
+               "SAVE: A11 is the factory STRINGS again");
+        fm1_in.buttons |= 1u << panel.btn[B_GLO];   /* GLO + PRESETS: the other bank */
+        u8t_turn(EN_PRESET, 1);
+        fm1_in.buttons &= ~(1u << panel.btn[B_GLO]);
+        u8t_ok(ue.slot == 64u, "GLO + PRESETS: A11 -> B11");
+        for (k = 0; k < 64u; k++) {              /* bank A saved everywhere, then restored at power-on */
+            u8_load(k);
+            u8_ed.co = 7;
+            if (p8s_put(k, &u8_ed)) break;
+        }
+        u8_load(0);
+        u8t_ok(k == 64u && u8_ed.co == 7u, "every program of bank A saved (all with CUTOFF 7)");
+        p8g_due = 0;
+        ue.loaded = 0;                            /* power-on with SAVE held */
+        fm1_in.buttons |= 1u << panel.btn[B_SAVE];
+        host_pressed = 1u << panel.btn[B_SAVE];
+        u8_input();
+        fm1_in.buttons &= ~(1u << panel.btn[B_SAVE]);
+        u8_input();
+        u8t_ok(ue.save == U8S_RESTORE_A, "power-on with SAVE held: it asks, RESTORE BANK A");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/restore_a.ppm", out);
+        u8t_dump(path);
+        u8t_tap(B_SAVE);
+        for (k = 0; k < 64u; k++) {
+            p8s_get(k, &chk);
+            if (memcmp(&chk.mode, &P800_PROGS[k].mode, P8S_NV) || strcmp(chk.name, P800_PROGS[k].name)) break;
+        }
+        p8s_get(64, &chk);
+        u8t_ok(k == 64u && chk.co == co_saved + 5u && ue.msg && !strcmp(ue.msg, "BANK A RESTORED"),
+               "SAVE: all of bank A the factory programs again, bank B kept");
+        {                                         /* the global settings: saved 3 s after a change, back at power-on */
+            uint32_t t;
+            u8_load(70);
+            p800_set(P800_PH_RATE, 9), ue.ph_mix = 8, ec.delay = 77, ec.drive = 1, p800_set(P800_TUNE, -12);
+            p800_set(P800_HP_CUT, 60), p800_set(P800_HP_MG, 0);
+            ue.ph_on = 1, ec.on = 1, p800_set(P800_PH_MIX, 8), p800_set(P800_HP_ON, 1);
+            er = u8t_erases;
+            for (t = 0; t < 2000u; t += 16u) fm1_ms += 16u, u8_input();
+            u8t_ok(u8t_erases == er, "a change to the settings: not written at once");
+            for (t = 0; t < 2000u; t += 16u) fm1_ms += 16u, u8_input();
+            u8t_ok(u8t_erases == er + 1u, "3 s after the last change: written, once");
+            p800_init();                          /* power-off, power-on */
+            memset(&ue, 0, sizeof ue);
+            ec.on = 0, ec.delay = 50, ec.drive = 0;
+            u8_input();
+            u8t_ok(ue.slot == 70u && p8.set[P800_PH_RATE] == 9 && ue.ph_mix == 8 && ec.delay == 77 && ec.drive == 1 &&
+                       p8.set[P800_TUNE] == -12 && p8.set[P800_HP_CUT] == 60 && !p8.set[P800_HP_MG],
+                   "power-on: the program last chosen (B17), the tuning, the phaser's, echo's and high-pass's settings");
+            u8t_ok(!ue.ph_on && !p8.set[P800_PH_MIX] && !ec.on && !p8.set[P800_HP_ON],
+                   "and the phaser, the echo and the high-pass off (the Poly-800 as it was)");
+        }
+        u8_draw();
+        snprintf(path, sizeof path, "%s/b17.ppm", out);
         u8t_dump(path);
     }
     printf(u8t_fails ? "%d FAILED\n" : "all passed\n", u8t_fails);

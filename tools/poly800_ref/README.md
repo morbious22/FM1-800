@@ -187,3 +187,17 @@ leaves them out, the high-pass off, for the version to share). One setting for e
 off, GLO + KNOB 2 CUTOFF (0..99: 40 Hz .. 10 kHz, the page's), GLO + LFO whether the MG sweeps it with the low-pass
 (`P800_HP_MG`, 1 as the page). Shown while GLO is held; HPF at the bottom of the home screen while on. `ui800_test.c`
 runs in both builds (a low C 13 dB thinner at CUTOFF 75).
+
+## Saving (step 8, v0.9.0)
+
+`firmware/src/prog800.c`. 128 program slots: bank A (11..88) the 64 factory programs, each rewritable; bank B (11..88)
+INIT until something is saved there (one DCO, a saw at 8', the filter open, an organ's gate). A slot never saved
+holds its factory program, so nothing is written before the first SAVE. Four storage objects of 32 programs (72 bytes
+each: the name in full and the 47 settings), at 0xD0000.. (the top of Felucca's third sample slot, never written in
+this build); writing one program rewrites its object, gathered in Felucca's unused reverb buffer.
+On the FM-1: PRESETS turns through A11..A88, B11..B88 (GLO + PRESETS: the other bank's same number); SAVE asks SAVE TO
+(this slot; PRESETS picks another), SAVE again writes it, any other button: NOT SAVED. GLO + SAVE: this slot back to
+its factory program. Holding SAVE while switching on: RESTORE BANK A (all 64 factory programs; bank B kept).
+The global settings (the tuning; the phaser's, the echo's and the high-pass's settings; the program last chosen) save
+themselves 3 s after the last change (one 20-byte object) and come back at power-on; the phaser, the echo and the
+high-pass always start off. `ui800_test.c` runs it all on a flash held in RAM.
