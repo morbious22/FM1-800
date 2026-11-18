@@ -157,3 +157,12 @@ program, as a pedal on the floor: SELECT clockwise on, anticlockwise off (its MI
 FEEDBACK, MIX (0..10), GLO + KNOB 1 STAGES (2..12). At power-on it is on at the page's settings. The lights are
 `ui800.c u8_leds`: the buttons and keys glow dim, FX lit while the phaser is on, OCT- / OCT+ lit when the keys are
 moved, a key lit while held.
+
+**The deep phaser (v0.7.0, by ear, not the page's).** On the FM-1 the page's phaser never went deep or wide: its
+stages sit 1.5 times apart (their notches spread, none deep), its feedback comes back one Chrome block (2.9 ms) late
+(a faint comb, not a resonance) and both sides sweep alike. The FM-1 now plays a deep one (`P800_PH_DEEP` 1): every
+stage at one pitch (Q .7), swept about 1 kHz +- 3 octaves at DEPTH 10 (125 Hz .. 8 kHz), its feedback straight back
+(a sample, up to .9 at FEEDBACK 10), the right side's sweep a quarter turn ahead. The same STRINGS chord at STAGES 6,
+RATE 2, DEPTH 10, FEEDBACK 7, MIX 10: the bands from 200 Hz to 6 kHz move 19.0 dB (median; the page's 14.2) and the
+two sides are far less alike (correlation +0.39, the page's +0.80). The tests that hold the firmware to the page play
+the page's phaser (`P800_PH_DEEP` 0: `host.c`), and still pass as before.

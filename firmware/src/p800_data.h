@@ -737,6 +737,8 @@ static const int32_t P800_K_LP1[16] = {
 #define P800_K_LP2 247650882   /* page N.f2.Q.value=.7 */
 #define P800_K_HP 247650882    /* page N.hp.Q.value=.7 */
 #define P800_K_AP 536870912   /* page ap.Q.value=.5 (allpass: a linear Q) */
+#define P800_K_AP_DEEP 383479223   /* FM1-800's deep phaser: Q .7 (not the page's; by ear) */
+#define P800_PH_DEEP_C 8321        /* .. its sweep's centre, 1 kHz */
 /* the shelves, direct form as Chrome's (RBJ, S = 1): b0 b1 b2 a1 a2 / a0, Q29 */
 static const int32_t P800_LS[5] = {
     533445744, -1046416377, 513356247, -1046266319, 510081137

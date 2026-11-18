@@ -62,8 +62,10 @@ typedef struct {
 #include "p800_data.h"
 
 enum { P800_TUNE, P800_VOL, P800_AGE, P800_PH_STAGES, P800_PH_RATE, P800_PH_DEPTH, P800_PH_FB, P800_PH_MIX,
-       P800_HP_ON, P800_HP_CUT, P800_NSET };
-static const int16_t P800_SET_DEF[P800_NSET] = {0, 22, 3, 0, 4, 6, 3, 5, 0, 25};   /* the page's controls as it opens */
+       P800_HP_ON, P800_HP_CUT, P800_PH_DEEP, P800_NSET };
+/* the page's controls as it opens; P800_PH_DEEP (not the page's): 1 the deep phaser (the FM-1), 0 the page's own (the
+ * tests that hold the firmware to the page) */
+static const int16_t P800_SET_DEF[P800_NSET] = {0, 22, 3, 0, 4, 6, 3, 5, 0, 25, 1};
 
 #define P800_ONE (1 << 30)
 
@@ -270,6 +272,8 @@ static struct {
     int32_t ch_d[2];             /* the delays at the end of the last block, Q10 samples */
     p800_dfs_t ap[2][6];
     uint32_t fb_i, ph_ph;
+    int32_t ph_last[2];                          /* the deep phaser: each side's last output (its feedback) */
+    p800_dfs_t apr[6];                           /* .. and its right side's allpasses (the left's: ap[1]) */
 } p8;
 
 static int32_t p800_ch_buf[CH_LEN] P800_POOL;    /* the chorus's delay line (mono, before it) */
@@ -550,9 +554,9 @@ static void p800_render(int32_t *outl, int32_t *outr)
     const p800_prog_t *g;
     int32_t vb[P800_BLK];
     int16_t e3[P800_BLK];
-    p800_df1_t c1, c2, chp, cap[6];
+    p800_df1_t c1, c2, chp, cap[6], capr[6];
     uint32_t i, k, nap = (uint32_t)p8.set[P800_PH_STAGES] + 1u;
-    int32_t mg, mod12, fc, fcmg, hc, ph, chd[2], chs[2], nzq, og, wet, pfb, pmix;
+    int32_t mg, mod12, fc, fcmg, hc, ph, chd[2], chs[2], nzq, og, wet, pfb, pmix, deep = p8.set[P800_PH_DEEP];
     p800_ready();
     g = p8.pg;
     if (nap > 6u) nap = 6u;
@@ -580,11 +584,22 @@ static void p800_render(int32_t *outl, int32_t *outr)
     hc = (p8.set[P800_HP_ON] ? P800_HC_CENTS[p8.set[P800_HP_CUT]] : P800_HP_OFF_CENTS) + ((mg * (g->mg[3] * 1200 / 15)) >> 15);
     df1_set(&chp, DF_HP, hc, P800_K_HP);
 
-    /* the phaser's allpasses: page 350*1.5^k Hz, detune its LFO x depth/10 x 2400 cents */
+    /* the phaser's allpasses. The page's: 350*1.5^k Hz each, detune its LFO x depth/10 x 2400 cents, both sides alike.
+     * The deep one (the FM-1, tuned by ear, not the page's): every stage at one pitch, so the notches stack deep, swept
+     * about 1 kHz +- depth/10 x 3 octaves (125 Hz .. 8 kHz), the right side's sweep a quarter turn ahead (it moves
+     * between the speakers) */
     ph = p800_sin(p8.ph_ph);
+    if (deep) {
+        int32_t phr = p800_sin(p8.ph_ph + 0x40000000u), d = p8.set[P800_PH_DEPTH] * 360;
+        for (k = 0; k < nap; k++) {
+            df1_set(&cap[k], DF_AP, P800_PH_DEEP_C + ((ph * d) >> 15), P800_K_AP_DEEP);
+            df1_set(&capr[k], DF_AP, P800_PH_DEEP_C + ((phr * d) >> 15), P800_K_AP_DEEP);
+        }
+    } else {
+        for (k = 0; k < nap; k++)
+            df1_set(&cap[k], DF_AP, P800_AP_CENTS[k] + ((ph * (p8.set[P800_PH_DEPTH] * 240)) >> 15), P800_K_AP);
+    }
     p8.ph_ph += P800_PH_INC[p8.set[P800_PH_RATE]] * P800_BLK;
-    for (k = 0; k < nap; k++)
-        df1_set(&cap[k], DF_AP, P800_AP_CENTS[k] + ((ph * (p8.set[P800_PH_DEPTH] * 240)) >> 15), P800_K_AP);
 
     /* the chorus delays at this block's end: (.013 | .017) + .004 sin, in Q10 samples */
     for (k = 0; k < 2u; k++) {
@@ -597,7 +612,8 @@ static void p800_render(int32_t *outl, int32_t *outr)
     nzq = g->nz * 32768 / 30;                    /* page nl.gain=nz/15*.5 */
     og = p8.set[P800_VOL] * 34636833 / 10 * 9;    /* page out.gain=vo/31*.9 (P800_ONE) */
     wet = g->ch ? P800_ONE / 2 : 0;                   /* page wet.gain=ch?.5:0 */
-    pfb = p8.set[P800_PH_FB] * (P800_ONE / 10) / 10 * 8;    /* page pf.gain=pf/10*.8 */
+    pfb = deep ? p8.set[P800_PH_FB] * (P800_ONE / 100) * 9   /* deep: up to .9, straight back (a sample) */
+               : p8.set[P800_PH_FB] * (P800_ONE / 10) / 10 * 8;    /* page pf.gain=pf/10*.8 */
     pmix = p8.set[P800_PH_MIX] * (P800_ONE / 10);           /* page pw.gain=pm/10 */
 
     for (i = 0; i < P800_BLK; i++) {
@@ -632,11 +648,19 @@ static void p800_render(int32_t *outl, int32_t *outr)
         p8.ch_w++;
         for (k = 0; k < 2u; k++) {
             int32_t o = mulq30(og, x + mulq30(wet, tap[k]));
-            int32_t a = o + mulq30(pfb, p800_fb[k][p8.fb_i]);   /* the feedback, one Chrome block late */
+            int32_t a;
             uint32_t s;
-            for (s = 0; s < nap; s++)            /* the allpasses */
-                a = df1_run(&cap[s], &p8.ap[k][s], a);
-            p800_fb[k][p8.fb_i] = a;
+            if (deep) {                          /* the deep phaser: its feedback a sample late, each side its sweep */
+                a = o + mulq30(pfb, p8.ph_last[k]);
+                for (s = 0; s < nap; s++)
+                    a = k ? df1_run(&capr[s], &p8.apr[s], a) : df1_run(&cap[s], &p8.ap[0][s], a);
+                p8.ph_last[k] = a;
+            } else {
+                a = o + mulq30(pfb, p800_fb[k][p8.fb_i]);   /* the feedback, one Chrome block late */
+                for (s = 0; s < nap; s++)        /* the allpasses */
+                    a = df1_run(&cap[s], &p8.ap[k][s], a);
+                p800_fb[k][p8.fb_i] = a;
+            }
             y[k] = o + mulq30(pmix, a);
         }
         p8.fb_i = (p8.fb_i + 1u) & (FB_LEN - 1u);

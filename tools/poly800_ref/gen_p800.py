@@ -162,6 +162,8 @@ def main():
     o.append(f"#define P800_K_LP2 {q(10 ** (-0.7 / 20), 28)}   /* page N.f2.Q.value=.7 */")
     o.append(f"#define P800_K_HP {q(10 ** (-0.7 / 20), 28)}    /* page N.hp.Q.value=.7 */")
     o.append(f"#define P800_K_AP {q(1 / 0.5, 28)}   /* page ap.Q.value=.5 (allpass: a linear Q) */")
+    o.append(f"#define P800_K_AP_DEEP {q(1 / 0.7, 28)}   /* FM1-800's deep phaser: Q .7 (not the page's; by ear) */")
+    o.append(f"#define P800_PH_DEEP_C {round(cents(1000))}        /* .. its sweep's centre, 1 kHz */")
 
     # Chrome's own shelves, direct form (RBJ, S = 1): b0 b1 b2 a1 a2, normalised by a0, Q29
     def shelf(f0, gain, high):

@@ -129,6 +129,7 @@ int main(int argc, char **argv)
         if (phaser && g->num != PHPROG[0] && g->num != PHPROG[1] && g->num != PHPROG[2] && g->num != PHPROG[3]) continue;
         for (v = 0; v < nv; v++) {
             memcpy(set, P800_SET_DEF, sizeof set);
+            set[P800_PH_DEEP] = 0;                /* the page's own phaser: these renders are held to the page's */
             if (strcmp(argv[2], "page")) set[P800_AGE] = 0, set[P800_PH_MIX] = 0;   /* dry: Age 0, phaser mix 0 */
             if (phaser) {
                 set[P800_PH_MIX] = 10;
