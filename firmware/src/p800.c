@@ -62,10 +62,10 @@ typedef struct {
 #include "p800_data.h"
 
 enum { P800_TUNE, P800_VOL, P800_AGE, P800_PH_STAGES, P800_PH_RATE, P800_PH_DEPTH, P800_PH_FB, P800_PH_MIX,
-       P800_HP_ON, P800_HP_CUT, P800_PH_DEEP, P800_NSET };
+       P800_HP_ON, P800_HP_CUT, P800_PH_DEEP, P800_HP_MG, P800_NSET };
 /* the page's controls as it opens; P800_PH_DEEP (not the page's): 1 the deep phaser (the FM-1), 0 the page's own (the
- * tests that hold the firmware to the page) */
-static const int16_t P800_SET_DEF[P800_NSET] = {0, 22, 3, 0, 4, 6, 3, 5, 0, 25, 1};
+ * tests that hold the firmware to the page); P800_HP_MG (FM1-800): 1 the MG sweeps the high-pass too (the page), 0 not */
+static const int16_t P800_SET_DEF[P800_NSET] = {0, 22, 3, 0, 4, 6, 3, 5, 0, 25, 1, 1};
 
 #define P800_ONE (1 << 30)
 
@@ -581,7 +581,8 @@ static void p800_render(int32_t *outl, int32_t *outr)
     /* DEG 3 -> the cutoff (page eg gain ei/15*7200 cents, polarity) and the noise's level */
     env_block(&p8.e3, e3);
     fcmg = p8.base_cents + ((mg * (g->mg[3] * 1200 / 15)) >> 15);
-    hc = (p8.set[P800_HP_ON] ? P800_HC_CENTS[p8.set[P800_HP_CUT]] : P800_HP_OFF_CENTS) + ((mg * (g->mg[3] * 1200 / 15)) >> 15);
+    hc = (p8.set[P800_HP_ON] ? P800_HC_CENTS[p8.set[P800_HP_CUT]] : P800_HP_OFF_CENTS) +
+         (p8.set[P800_HP_MG] ? (mg * (g->mg[3] * 1200 / 15)) >> 15 : 0);   /* (the MG with the low-pass, or still) */
     df1_set(&chp, DF_HP, hc, P800_K_HP);
 
     /* the phaser's allpasses. The page's: 350*1.5^k Hz each, detune its LFO x depth/10 x 2400 cents, both sides alike.

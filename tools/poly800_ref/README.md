@@ -181,3 +181,9 @@ repeats bend. The filters' state is 8 bits finer than the tape: what is left of 
 the echo is off and the tape quiet for 1.5 s it costs nothing. 32-bit arithmetic only (CPU.md).
 `in_felucca.c` checks DELAY's range, the repeats' times, that each is softer and darker, the INPUT switch on a quiet
 and a loud sound, REPEAT 10 held by the saturation, and that off it dies away and rests; `ui800_test.c` the page.
+
+**The high-pass add-on's controls (v0.8.2, the owner's builds).** `FM1_HP` (tools/build.py: 1; `FM1_HP=0 ./build.sh`
+leaves them out, the high-pass off, for the version to share). One setting for every program, on GLO: GLO + SEL on /
+off, GLO + KNOB 2 CUTOFF (0..99: 40 Hz .. 10 kHz, the page's), GLO + LFO whether the MG sweeps it with the low-pass
+(`P800_HP_MG`, 1 as the page). Shown while GLO is held; HPF at the bottom of the home screen while on. `ui800_test.c`
+runs in both builds (a low C 13 dB thinner at CUTOFF 75).

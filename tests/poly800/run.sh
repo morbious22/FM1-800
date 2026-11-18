@@ -24,10 +24,12 @@ if [ -f build/gen/felucca_tables.h ]; then
             -o "$OUT/in_felucca$m" tests/poly800/in_felucca.c -lm
         "$OUT/in_felucca$m"
     done
-    cc -O1 -w -DFM1_800=1 -Ibuild/gen -Ifirmware/src -Ifirmware/hal -Ifirmware/bsp/chip -Ifirmware/bsp/boards/fm1 -Itests \
-        -o "$OUT/ui800_test" tests/poly800/ui800_test.c -lm     # step 7: the home screen and its controls
     mkdir -p "$OUT/screens"
-    "$OUT/ui800_test" "$OUT/screens"
+    for hp in 1 0; do                             # step 7: the screen and its controls; FM1_HP=0: the shared build
+        cc -O1 -w -DFM1_800=1 -DFM1_HP=$hp -Ibuild/gen -Ifirmware/src -Ifirmware/hal -Ifirmware/bsp/chip \
+            -Ifirmware/bsp/boards/fm1 -Itests -o "$OUT/ui800_test$hp" tests/poly800/ui800_test.c -lm
+        "$OUT/ui800_test$hp" "$OUT/screens"
+    done
 else
     echo "(inside Felucca: skipped, no build/gen: run ./build.sh first)"
 fi

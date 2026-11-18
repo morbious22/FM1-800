@@ -20,6 +20,10 @@
 #define FELUCCA_FM4 0            /* the DIGITAL engine (eng_digital.c, four-operator FM): kept in the tree, not built
                                   * by default; replaced by FM6, its sounds convert (fm4_convert.c) */
 #endif
+#ifndef FM1_HP
+#define FM1_HP 0  /* FM1-800: the high-pass add-on's controls (GLO + SEL / KNOB 2 / LFO). tools/build.py builds it with 1;
+                   * FM1_HP=0 ./build.sh leaves them out (the high-pass stays off), for the version to share */
+#endif
 #ifndef FM1_800
 #define FM1_800 0                /* FM1-800 (step 6): 1 = the FM-1 is the Poly-800 alone: every note to it (voice.c),
                                   * only it rendered, straight to the output (fx.c mix_block), part 1 on it at power-on.

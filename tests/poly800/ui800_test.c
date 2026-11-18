@@ -270,8 +270,58 @@ int main(int argc, char **argv)
         u8_draw();
         snprintf(path, sizeof path, "%s/home_fx.ppm", out);
         u8t_dump(path);
+
         u8t_turn(EN_K1, 1);
         u8t_ok(u8_get(ue.sel) == co0 + 1u || u8_get(ue.sel) == U8_PAR[ue.sel].max, "home: KNOB 1 edits the program again");
+    }
+    {                                             /* the high-pass on GLO (FM1_HP builds; FM1_HP=0: nothing) */
+        uint32_t g = 1u << panel.btn[B_GLO];
+        u8t_ok(!p8.set[P800_HP_ON] && p8.set[P800_HP_MG], "at power-on the high-pass is off (the MG ready to sweep it)");
+        fm1_in.buttons |= g;
+        u8_input();
+        u8t_tap(B_SCL);                           /* (u8t_tap leaves GLO held: it only lets go of SEL) */
+#if FM1_HP
+        u8t_ok(p8.set[P800_HP_ON] && ue.view == UV_HP, "GLO + SEL: the high-pass on, shown");
+        u8t_turn(EN_K2, 50);
+        u8t_ok(p8.set[P800_HP_CUT] == 75, "GLO + KNOB 2: its cutoff 25 -> 75");
+        u8t_tap(B_LFO);
+        u8t_ok(!p8.set[P800_HP_MG], "GLO + LFO: the MG no longer sweeps it");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/hpf.ppm", out);
+        u8t_dump(path);
+        u8t_tap(B_LFO);
+        u8t_ok(p8.set[P800_HP_MG], "GLO + LFO again: it does");
+        {                                         /* and it is heard: a low note thinner with it on */
+            int32_t o[2 * CTL];
+            uint32_t b, i, on;
+            double e[2];
+            fm1_in.buttons &= ~g;
+            u8_input();
+            ue.view = UV_NONE;
+            trk[0].preset = 0;                    /* (STRINGS as stored: the walk through every parameter above left
+                                                   * it edited, its noise at full) */
+            p800_program(0);
+            p8e_prog = 0;
+            for (on = 0; on < 2u; on++) {
+                p800_set(P800_HP_ON, (int32_t)on);
+                e[on] = 0;
+                for (b = 0; b < 300u; b++) {
+                    if (b == 2u) trk_note_on(&trk[0], 36, 100);
+                    mix_block(o, CTL);
+                    for (i = 0; i < 2u * CTL; i += 2) e[on] += (double)o[i] * o[i];
+                }
+                trk_note_off(&trk[0], 36);
+                for (b = 0; b < 3000u; b++) mix_block(o, CTL);
+            }
+            printf("  a low C, high-pass at 75: %.1f dB against off\n", 10 * log10(e[1] / e[0]));
+            u8t_ok(e[1] < e[0] / 4, "and it is heard: the low note far thinner (more than 6 dB down)");
+        }
+        p800_set(P800_HP_ON, 0), p800_set(P800_HP_CUT, 25);
+#else
+        u8t_ok(!p8.set[P800_HP_ON], "FM1_HP=0: GLO + SEL does nothing (no high-pass in this build)");
+        fm1_in.buttons &= ~g;
+        u8_input();
+#endif
     }
     for (i = 0; i < 4u; i++) {
         trk[0].preset = SHOW[i];
