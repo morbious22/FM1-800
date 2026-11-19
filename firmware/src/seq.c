@@ -1234,6 +1234,10 @@ static void seq_tick(track_t *t, uint32_t n)
     uint32_t period, len, top;
     if (song.g[G_CLOCK])
         n = midi_grid_advance(&midi_seq_grid[trk_index(t)], n, (uint32_t)t->p[P_SDIV]);
+#if FM1_800
+    if (t == &trk[0])
+        sq_tick(n);                                 /* FM1-800: the Poly-800's sequencer's notes end (seq800.c) */
+#endif
     if (t->seq_n && !t->seq_hold) {
         if (t->seq_off <= n)
             seq_release(t);
@@ -1255,6 +1259,10 @@ static void seq_tick(track_t *t, uint32_t n)
         top = t->seq_pos >= 0x7FFFFFFFu;            /* (PLAY, a SONG section: its first step) */
         t->seq_pos = top ? (chain.running ? chain.carry : 0u) : t->seq_pos - cur_len;
         t->seq_idx = (uint16_t)((t->seq_idx + 1u) % len);
+#if FM1_800
+        if (t == &trk[0])
+            sq_step(top, cur_len);                  /* FM1-800: its next step, in step with part 1's (seq800.c) */
+#endif
         seq_enter(t, top, len);
         if (t->p[P_SQNT] && !t->nd_fired)
             seq_play_on(t, period);                 /* QUANTIZE ON: every step on its start, as before 1.2 */
@@ -1456,6 +1464,20 @@ static void events_block(uint32_t n)
         uint32_t source = midi_in_source[at] ? midi_in_source[at] : 1u, ms = midi_in_ms[at];
         mi_r++;
         if (status >= 0xF8u) {
+#if FM1_800
+            if (status == 0xF8u || status == 0xFAu || status == 0xFBu) {   /* FM1-800: clock coming in, from USB or
+                                                                            * TRS: followed, no setting (seq800.c) */
+                sq.ext_ms = fm1_ms;
+                if (clock_mode != source) {
+                    seq_stop();
+                    memset(&midi_clock, 0, sizeof midi_clock);
+                    song.g[G_CLOCK] = (int16_t)source;
+                    clock_mode = source;
+                    midi_clock.mode = (uint8_t)source;
+                    midi_beat_samples = 0;
+                }
+            }
+#endif
             if (clock_mode == source) {
                 if (status == 0xF8u)
                     midi_clock_pulse(ms);

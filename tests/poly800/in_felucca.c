@@ -38,6 +38,9 @@ static void fm1_delay_ms(uint32_t ms) { (void)ms; }
 #include "../../firmware/bsp/chip/usb.c"
 #include "../../firmware/src/midi_uart.c"
 #include "../../firmware/src/song_chain.c"
+#if FM1_800
+#include "../../firmware/src/seq800.c"
+#endif
 #include "../../firmware/src/seq.c"
 
 static int fails;

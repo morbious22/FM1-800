@@ -221,3 +221,17 @@ crossings spreads 0.036 / 0.851 samples, the level swings 0.0 / 3.1 dB; a burst'
 and let go, nothing else touched meanwhile) now opens a HIGH-PASS page that stays: SELECT on / off, KNOB 1 CUTOFF,
 KNOB 2 the MG sweep on (clockwise) / off. GLO tapped again (or FX, on to PHASER) leaves. GLO held with another control
 is as before (tuning, STAGES, the bank jump, the restore) and opens no page. FM1_HP=0 builds: a tap does nothing.
+
+## The sequencer (step 11, v0.10.0)
+
+`firmware/src/seq800.c`: the Poly-800's 256-note step sequencer. Up to 256 steps of a 16th note, each a note or a
+chord (up to 8 notes, all counting to the 256), a TIE or a REST; it loops over the steps entered (12 steps: a bar of
+3/4). REC starts a new sequence (the old one goes, as on the Poly-800; the SEQUENCE page shows it): every note or
+chord played, on the keys or over MIDI, is a step when its last key lets go; ARP a TIE, SEQ a REST; REC again ends it
+and saves it (OBJ_P8SEQ). PLAY/STOP plays it, in step with Felucca's own sequencer's part 1 (`seq.c seq_tick`: its
+tempo, swing and MIDI clock handling), each note 80 % of its step, held on into a TIE. MIDI clock from USB or TRS
+(a drum machine) is followed as soon as it comes in, its start and stop too; 3 s after it stops, stopped, the
+sequencer has its own tempo again (the SEQUENCE page, KNOB 1: 40..240, saved with the global settings). At power-on
+Felucca's own patterns (an old autosave's) are cleared, so PLAY plays only the Poly-800's sequence.
+`ui800_test.c` enters a chord, a tie, a rest and a note, checks the timing of every step over two loops, the stop,
+the tempo, the sequence and tempo across a power cycle, the 256-note limit and MIDI clock's start and stop.

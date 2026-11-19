@@ -27,6 +27,10 @@
  * while playing), tapped again (or FX) leaves. On it SELECT clockwise on, anticlockwise off; KNOB 1 its CUTOFF
  * (0..99); KNOB 2 clockwise the MG sweeps it (with the low-pass, as the page), anticlockwise not. HPF at the bottom of
  * the home screen while it is on. GLO held with another control is as before (tuning, STAGES, banks, restore).
+ * The sequencer (seq800.c, step 11): REC starts entering a new sequence (the SEQUENCE page shows it) and, again, ends
+ * it (saved); while entering every note or chord played is a step, ARP a TIE, SEQ a REST. Otherwise SEQ opens the
+ * SEQUENCE page (and again, home): KNOB 1 its TEMPO (40..240; following MIDI clock it shows EXT). PLAY/STOP starts and
+ * stops it (with MIDI clock, the drum machine's start and stop too). REC lit while entering, PLAY while playing.
  * HOME held: the CPU, now and its peak since HOME went down, and the overruns since power-on (audio.c: a half of the
  * audio not ready in time, heard as a crackle; a crackle with none is something else, such as a flash erase).
  * The lights (u8_leds, in place of Felucca's ui_leds): every button and key glows dim, FX lit with the phaser on, OCT-
@@ -248,7 +252,7 @@ static p800_prog_t u8_ed;                        /* the program playing: its slo
                                                   * here; the
                                                   * Poly-800 plays it while p8.pg points here. A new program: gone */
 enum { UV_NONE, UV_PAR, UV_TUNE, UV_HP, UV_CPU };
-enum { PG_HOME, PG_PHASER, PG_ECHO, PG_HP };
+enum { PG_HOME, PG_PHASER, PG_ECHO, PG_HP, PG_SEQ };
 static struct {
     uint8_t sel, view, prog, page, ph_on, ph_set, ph_mix;
     uint8_t slot, edited, loaded;                /* step 8: the slot playing (0..63 bank A, 64..127 bank B), edited
@@ -267,7 +271,9 @@ static int p8s_put(uint32_t slot, const p800_prog_t *g);
 static int p8s_restore_a(void);
 static void p8s_factory(uint32_t slot, p800_prog_t *g);
 static uint32_t p8g_boot(void);
-static void p8g_poll(void);   /* .. the page; the phaser on, its MIX
+static void p8g_poll(void);
+static int p8q_save(void);
+static void p8q_load(void);   /* .. the page; the phaser on, its MIX
                                                   * (p8.set's is 0 while it is off), read once from the defaults */   /* the parameter SELECT is on, what the lower half shows, the program
                                                   * the edits belong to */
 
@@ -288,6 +294,18 @@ static void u8_load(uint32_t slot)
 
 static void u8_say(const char *m) { ue.msg = m, ue.msg_ms = fm1_ms; }   /* (ue.msg marks it set: the time as it is,
                                                   * never one ahead, or the 1.5 s would wrap round to gone) */
+
+/* a note's name, "C#4" (MIDI 60 = C4) */
+static void u8_note_txt(char *b, uint32_t nt)
+{
+    static const char *const N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    int32_t oct = (int32_t)(nt / 12u) - 1;
+    str_cpy(b, N[nt % 12u], 4);
+    if (oct < 0)
+        str_cpy(b + str_len(b), "-1", 4);
+    else
+        fmt_int(b + str_len(b), oct);
+}
 
 /* "A 11": the slot's bank and number */
 static void u8_slot_txt(char *b, uint32_t slot)
@@ -358,6 +376,10 @@ static uint32_t u8_sig_bot(void)
     sig += (uint32_t)p8.set[P800_HP_ON] * 7u + (uint32_t)p8.set[P800_HP_MG] * 70001u;
     if (ue.page == PG_HP)
         sig += (uint32_t)p8.set[P800_HP_CUT] * 311u + 4999u;
+    sig += (uint32_t)sq.rec * 8191u + (uint32_t)song.playing * 524287u;
+    if (ue.page == PG_SEQ)
+        sig += sq.nsteps * 37u + sq.nnotes * 1031u + (uint32_t)song.g[G_BPM] * 65537u + (uint32_t)song.g[G_CLOCK] * 999983u +
+               (uint32_t)sq.ngrp * 251u + (song.playing ? sq.at * 17u : 0u);
     if (ue.view == UV_CPU)
         sig += u8_cpu_now() * 1000003u + u8_cpu_peak() * 3001u +
                U8_LATE * 7u;
@@ -400,8 +422,10 @@ static void u8_draw(void)
             u8_text(nx + text_w(&AF_S, g->mode ? "DOUBLE" : "WHOLE") + 10, 29, &AF_S, "EDITED", u8_rgb(255, 230, 120));
         if (ue.save || ue.msg) {                 /* SAVE asking, or a word after it */
             char d[6];
-            if (!ue.save) {                      /* (a question always over a word left from before) */
-                u8_text(120 - text_w(&AF_L, ue.msg) / 2, 168, &AF_L, ue.msg, u8_rgb(255, 230, 120));
+            if (!ue.save) {                      /* (a question always over a word left from before; a long word in
+                                                  * the middle face, the screen 240 wide) */
+                const aafont_t *mf = text_w(&AF_L, ue.msg) <= 224 ? &AF_L : &AF_M;
+                u8_text(120 - text_w(mf, ue.msg) / 2, 172, mf, ue.msg, u8_rgb(255, 230, 120));
             } else {
                 u8_text(10, 152, &AF_S, ue.save == U8S_SAVE ? "SAVE TO" : ue.save == U8S_RESTORE ? "RESTORE TO FACTORY"
                                                                                                    : "RESTORE BANK A",
@@ -429,6 +453,47 @@ static void u8_draw(void)
                 u8_text(cx - text_w(&AF_S, L[c]) / 2, 172, &AF_S, L[c], u8_rgb(255, 170, 230));
                 u8_text(cx - text_w(&AF_L, v) / 2, 188, &AF_L, v,
                         c == 2u && U8_LATE ? u8_rgb(255, 230, 120) : u8_rgb(120, 240, 255));
+            }
+        } else if (ue.page == PG_SEQ) {          /* the sequence: entering or playing, TEMPO, steps, notes */
+            static const char *const L[3] = {"TEMPO", "STEPS", "NOTES"};
+            uint32_t c;
+            const char *st = sq.rec ? "RECORDING" : song.playing ? "PLAYING" : "STOPPED";
+            u8_text(10, 152, &AF_S, "SEQUENCE", u8_rgb(255, 170, 230));
+            u8_text(230 - text_w(&AF_M, st), 150, &AF_M, st, sq.rec ? u8_rgb(255, 230, 120) : u8_rgb(120, 240, 255));
+            for (c = 0; c < 3u; c++) {
+                int32_t cx = c == 0u ? 30 : c == 1u ? 110 : 190;
+                if (c == 0u) {
+                    if (song.g[G_CLOCK]) str_cpy(v, "EXT", sizeof v);
+                    else fmt_int(v, song.g[G_BPM]);
+                } else if (c == 1u) {
+                    fmt_int(v, sq.nsteps);
+                    if (song.playing && !sq.rec && sq.nsteps) {
+                        str_cpy(v, "", sizeof v);
+                        fmt_int(v, sq.at ? sq.at : sq.nsteps);
+                        str_cpy(v + str_len(v), "/", sizeof v - str_len(v));
+                        fmt_int(v + str_len(v), sq.nsteps);
+                    }
+                } else {
+                    fmt_int(v, sq.nnotes);
+                    str_cpy(v + str_len(v), "/256", sizeof v - str_len(v));
+                }
+                u8_text(cx - text_w(&AF_S, L[c]) / 2, 172, &AF_S, L[c], u8_rgb(255, 170, 230));
+                u8_text(cx - text_w(&AF_M, v) / 2, 185, &AF_M, v, u8_rgb(255, 255, 255));
+            }
+            if (sq.rec) {                        /* entering: the chord held now, else the step entered last */
+                char ln[40], nn[6];
+                uint32_t k2, cnt = sq.ngrp ? sq.ngrp : sq.nlast;
+                const uint8_t *ns = sq.ngrp ? sq.grp : sq.last;
+                str_cpy(ln, sq.ngrp ? "NOW: " : "LAST: ", sizeof ln);
+                if (!sq.ngrp && sq.last_kind == 2u) str_cpy(ln + str_len(ln), "TIE", sizeof ln - str_len(ln));
+                else if (!sq.ngrp && sq.last_kind == 3u) str_cpy(ln + str_len(ln), "REST", sizeof ln - str_len(ln));
+                else if (!cnt) str_cpy(ln, "PLAY A NOTE  ARP: TIE  SEQ: REST", sizeof ln);
+                for (k2 = 0; k2 < cnt && (sq.ngrp || sq.last_kind == 1u); k2++) {
+                    u8_note_txt(nn, ns[k2]);
+                    str_cpy(ln + str_len(ln), nn, sizeof ln - str_len(ln));
+                    if (k2 + 1u < cnt) str_cpy(ln + str_len(ln), " ", sizeof ln - str_len(ln));
+                }
+                u8_text(10, 206, &AF_S, ln, u8_rgb(255, 230, 120));
             }
         } else if (ue.page == PG_HP) {           /* the high-pass's page (FM1_HP): on / off, KNOB 1 and 2 */
             u8_text(10, 152, &AF_S, "HIGH-PASS", u8_rgb(255, 170, 230));
@@ -538,7 +603,16 @@ static void u8_input(void)
     }
     if (!ue.loaded) {                            /* power-on: the settings and the program last chosen (prog800.c);
                                                   * SAVE held: the factory restore of bank A is offered */
+        uint32_t t, k2;
+        for (t = 0; t < NTRK; t++) {             /* Felucca's own patterns (an old autosave's): gone, so PLAY plays
+                                                  * only the Poly-800's sequence; part 1 steps in 16ths */
+            for (k2 = 0; k2 < NSTEP; k2++) trk[t].step[k2].time = ST_REST;
+            trk[t].p[P_AMODE] = 0;
+        }
+        trk[0].p[P_SDIV] = 2, trk[0].p[P_SLEN] = 16;
+        song.g[G_CLOCK] = 0;
         u8_load(p8g_boot());
+        p8q_load();
         if ((fm1_in.buttons >> panel.btn[B_SAVE]) & 1u)
             ue.save = U8S_RESTORE_A;
         pressed &= ~(1u << panel.btn[B_SAVE]);   /* (that press is the one held through power-on) */
@@ -584,6 +658,37 @@ static void u8_input(void)
         (void)fm1_input_note_edges();
         return;
     }
+    /* the sequencer: REC, ARP / SEQ (entering: TIE / REST), SEQ (its page), PLAY/STOP */
+    if ((pressed >> panel.btn[B_REC]) & 1u) {
+        if (!sq.rec) {                           /* a new sequence: the old one goes (as the Poly-800) */
+            if (song.playing) transport_req = 2;
+            sq_clear();
+            sq.rec = 1;
+            ue.page = PG_SEQ;
+        } else {                                 /* done: kept */
+            sq_rec_poll();
+            if (sq.ngrp) (void)sq_add(1, sq.grp, sq.ngrp), sq.ngrp = 0;
+            sq.rec = 0;
+            u8_say(p8q_save() ? "NOT SAVED" : "SEQUENCE SAVED");
+        }
+    }
+    if (sq.rec) {
+        if ((pressed >> panel.btn[B_ARP]) & 1u) (void)sq_add(SQ_TIE, 0, 0);
+        if ((pressed >> panel.btn[B_SEQ]) & 1u) (void)sq_add(SQ_REST, 0, 0);
+        sq_rec_poll();
+    } else if ((pressed >> panel.btn[B_SEQ]) & 1u) {
+        ue.page = ue.page == PG_SEQ ? PG_HOME : PG_SEQ;
+    }
+    if ((pressed >> panel.btn[B_PLAY]) & 1u) {   /* PLAY/STOP (entering: it ends first, kept) */
+        if (sq.rec) {
+            if (sq.ngrp) (void)sq_add(1, sq.grp, sq.ngrp), sq.ngrp = 0;
+            sq.rec = 0;
+            (void)p8q_save();
+        }
+        transport_req = song.playing ? 2u : 1u;
+    }
+    if (song.g[G_CLOCK] && !song.playing && fm1_ms - sq.ext_ms > 3000u)
+        song.g[G_CLOCK] = 0;                     /* the clock gone 3 s, stopped: its own tempo again */
     if ((pressed >> panel.btn[B_HOME]) & 1u)     /* HOME held: the CPU (its peak from now) */
         U8_MAX_US = 0, ue.view = UV_CPU;
     if (ue.view == UV_CPU && !((fm1_in.buttons >> panel.btn[B_HOME]) & 1u))
@@ -602,7 +707,7 @@ static void u8_input(void)
         return;
     }
     if ((pressed >> panel.btn[B_FX]) & 1u) {     /* FX: the PHASER page, the ECHO page, and back */
-        ue.page = ue.page == PG_HOME || ue.page == PG_HP ? PG_PHASER : ue.page == PG_PHASER ? PG_ECHO : PG_HOME;
+        ue.page = ue.page == PG_PHASER ? PG_ECHO : ue.page == PG_ECHO ? PG_HOME : PG_PHASER;
         if (ue.view == UV_TUNE) ue.view = UV_PAR;
     }
     if ((s = panel_enc(EN_PRESET)) != 0) {       /* PRESETS: the program, round the 128 (A11..A88, B11..B88; its
@@ -618,7 +723,15 @@ static void u8_input(void)
         ue.page = ue.page == PG_HP ? PG_HOME : PG_HP;
 #endif
     ue.glo_prev = (uint8_t)glo;
-    if (ue.page == PG_HP) {                      /* the high-pass's page: SELECT on / off, KNOB 1 CUTOFF, KNOB 2 MG */
+    if (ue.page == PG_SEQ) {                     /* the sequence's page: KNOB 1 its TEMPO (its own clock) */
+        if ((s = panel_enc(EN_K1)) != 0 && !song.g[G_CLOCK]) {
+            int32_t b = song.g[G_BPM] + s;
+            song.g[G_BPM] = (int16_t)(b < 40 ? 40 : b > 240 ? 240 : b);
+        }
+        for (k = 0; k < NE; k++)
+            if (k != EN_PRESET && k != EN_K1)
+                (void)panel_enc(k);
+    } else if (ue.page == PG_HP) {               /* the high-pass's page: SELECT on / off, KNOB 1 CUTOFF, KNOB 2 MG */
         if ((s = panel_enc(EN_SELECT)) != 0)
             p800_set(P800_HP_ON, s > 0);
         if ((s = panel_enc(EN_K1)) != 0) {
@@ -709,6 +822,8 @@ static void u8_leds(void)
         led_put(nl, 14u + k, (int)((held >> k) & 1u));
     }
     led_put(nl, panel.btn[B_FX], ue.ph_on || ec.on);
+    led_put(nl, panel.btn[B_REC], sq.rec);
+    led_put(nl, panel.btn[B_PLAY], song.playing);
     led_put(nl, panel.btn[B_OCTDN], song.octave < 0);
     led_put(nl, panel.btn[B_OCTUP], song.octave > 0);
     fm1_led_dim_level(settings_leds == LEDS_DIM_LO);

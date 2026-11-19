@@ -49,7 +49,7 @@
 #define FM1_CRASH_CTX_N 1u         /* chip/fm1_irq.h: the registers of the last crash only (80 B of .noinit; four would
                                     * not fit beside the project slots) */
 #ifndef FELUCCA_VERSION
-#define FELUCCA_VERSION "v0.9.3" /* FM1-800's own version (based on Felucca 1.8.2); shown in the menu, the console
+#define FELUCCA_VERSION "v0.10.0" /* FM1-800's own version (based on Felucca 1.8.2); shown in the menu, the console
                                   * and the editor; build.py --release X.Y */
 #endif
 #if FELUCCA_OTA && !FELUCCA_FLASH
@@ -98,6 +98,9 @@ static __attribute__((noinline)) int c1_wait(void) { return fm1_cpu1_wait(); }  
 #include "midi_uart.c"
 #endif
 #include "song_chain.c"
+#if FM1_800
+#include "seq800.c"               /* FM1-800: the Poly-800's 256-note sequencer (seq.c steps it) */
+#endif
 #include "seq.c"
 #include "audio.c"
 

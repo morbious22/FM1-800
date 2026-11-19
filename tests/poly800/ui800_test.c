@@ -489,6 +489,97 @@ int main(int argc, char **argv)
         u8_input();
         u8t_ok(ue.view == UV_NONE, "HOME let go: gone");
     }
+    {                                             /* the sequencer (seq800.c) */
+        static uint8_t held[1400];
+        int32_t o[2 * CTL];
+        uint32_t b, er, k, ok_t = 1, step = 0;
+        static const uint8_t CH[3] = {48, 52, 55};
+        ue.page = PG_HOME, ue.view = UV_NONE;
+        song.master_q12 = 4096;
+        song.g[G_BPM] = 120;
+        u8t_tap(B_REC);
+        u8t_ok(sq.rec && ue.page == PG_SEQ && !sq.nsteps, "REC: entering a new sequence, the SEQUENCE page");
+        for (k = 0; k < 3u; k++) { trk_note_on(&trk[0], CH[k], 100); u8_input(); }   /* a chord, a key at a time */
+        u8t_ok(sq.ngrp == 3u && !sq.nsteps, "a chord held: gathered, not yet a step");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/seq_rec.ppm", out);
+        u8t_dump(path);
+        trk_note_off(&trk[0], 48), u8_input();
+        u8t_ok(!sq.nsteps, "(one key up, two still down: not yet)");
+        trk_note_off(&trk[0], 52), trk_note_off(&trk[0], 55), u8_input();
+        u8t_ok(sq.nsteps == 1u && sq.nnotes == 3u, "all let go: the chord is step 1 (3 notes)");
+        u8t_tap(B_ARP);
+        u8t_tap(B_SEQ);
+        trk_note_on(&trk[0], 60, 100), u8_input(), trk_note_off(&trk[0], 60), u8_input();
+        u8t_ok(sq.nsteps == 4u && sq.nnotes == 4u && sq.buf[4] == SQ_TIE && sq.buf[5] == SQ_REST,
+               "ARP a TIE, SEQ a REST, a note: 4 steps, 4 notes");
+        er = u8t_erases;
+        u8t_tap(B_REC);
+        u8t_ok(!sq.rec && u8t_erases == er + 1u && ue.msg && !strcmp(ue.msg, "SEQUENCE SAVED"), "REC again: done, saved");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/seq_saved.ppm", out);
+        u8t_dump(path);
+        u8t_tap(B_PLAY);
+        for (b = 0; b < 1400u; b++) {            /* 1400 blocks, ~1 s: 120 bpm, a step 5512 samples (~172 blocks) */
+            mix_block(o, CTL);
+            held[b] = (uint8_t)sq.non;
+        }
+        u8t_ok(song.playing, "PLAY: playing");
+        {                                         /* what sounds, step by step: chord (80 %), held on (tie), rest, C4 */
+            static const uint8_t WANT[4] = {3, 3, 0, 1};
+            for (step = 0; step < 8u; step++) {
+                uint32_t mid = step * 5512u / 32u + 60u, end = step * 5512u / 32u + 160u;   /* (in its step; near its end) */
+                uint32_t w = WANT[step % 4u], e = (step % 4u == 0u) ? 3u : 0u;   /* (a tie holds the chord to step 2's 80 %) */
+                if (mid >= 1400u || end >= 1400u) break;
+                if (held[mid] != w) ok_t = 0, printf("    step %u: %u sounding, wanted %u\n", step, held[mid], w);
+                if (step % 4u != 1u && held[end] != 0 && step % 4u != 0u) ok_t = 0, printf("    step %u: still sounding at its end\n", step);
+                (void)e;
+            }
+        }
+        u8t_ok(ok_t, "it plays in time: the chord, held on through the TIE, the REST, C4, and round again");
+        u8t_ok(held[172u + 160u] == 0u && held[3u * 172u + 160u] == 0u && held[3u * 172u + 120u] == 1u && held[172u - 2u] == 3u,
+               "a note sounds 80 % of its step (C4 gone near its end); the chord tied on over its step's end");
+        ue.msg = 0;                               /* (the page, not the word SEQUENCE SAVED over it) */
+        u8_draw();
+        snprintf(path, sizeof path, "%s/seq_play.ppm", out);
+        u8t_dump(path);
+        u8t_tap(B_PLAY);
+        for (b = 0; b < 4u; b++) mix_block(o, CTL);
+        u8t_ok(!song.playing && !sq.non, "PLAY/STOP again: stopped, nothing left sounding");
+        u8t_turn(EN_K1, 20);
+        u8t_ok(song.g[G_BPM] == 140, "SEQUENCE page, KNOB 1: TEMPO 140");
+        u8t_tap(B_SEQ);
+        u8t_ok(ue.page == PG_HOME, "SEQ (not entering): the page closes");
+        {                                         /* power-off, power-on: the sequence and its tempo kept */
+            uint32_t t;
+            for (t = 0; t < 8000u; t += 16u) { fm1_ms += 16u; u8_input(); for (b = 0; b < 22u; b++) mix_block(o, CTL); }
+            memset(&sq, 0, sizeof sq);
+            song.g[G_BPM] = 120;
+            p800_init();
+            memset(&ue, 0, sizeof ue);
+            u8_input();
+            u8t_ok(sq.nsteps == 4u && sq.nnotes == 4u && sq.buf[0] == 3u && song.g[G_BPM] == 140,
+                   "power-on: the sequence as entered, TEMPO 140");
+        }
+        u8t_tap(B_REC);                           /* the 256 notes: one more is refused */
+        for (k = 0; k < 300u; k++) { trk_note_on(&trk[0], (uint8_t)(40u + k % 40u), 100); u8_input(); trk_note_off(&trk[0], (uint8_t)(40u + k % 40u)); u8_input(); }
+        u8t_ok(sq.nnotes == 256u && sq.nsteps == 256u, "256 notes, then no more (the Poly-800's limit)");
+        u8t_tap(B_REC);
+        {                                         /* MIDI clock from a drum machine: followed, its start and stop */
+            uint32_t t;
+            (void)midi_enqueue(0x0000F80Fu, 1u);
+            for (b = 0; b < 2u; b++) mix_block(o, CTL);
+            u8t_ok(song.g[G_CLOCK] == 1, "MIDI clock on USB: followed (no setting)");
+            (void)midi_enqueue(0x0000FA0Fu, 1u);
+            for (b = 0; b < 2u; b++) mix_block(o, CTL);
+            u8t_ok(song.playing, "its START: playing");
+            (void)midi_enqueue(0x0000FC0Fu, 1u);
+            for (b = 0; b < 2u; b++) mix_block(o, CTL);
+            u8t_ok(!song.playing, "its STOP: stopped");
+            for (t = 0; t < 3500u; t += 16u) { fm1_ms += 16u; u8_input(); }
+            u8t_ok(song.g[G_CLOCK] == 0, "the clock gone 3 s, stopped: its own tempo again");
+        }
+    }
     printf(u8t_fails ? "%d FAILED\n" : "all passed\n", u8t_fails);
     return u8t_fails != 0;
 }

@@ -123,7 +123,8 @@ typedef struct {
     uint8_t ph[5];                               /* the phaser: STAGES, RATE, DEPTH, FEEDBACK, MIX */
     uint8_t ec[4];                               /* the echo: DELAY, REPEAT, BALANCE, AGE */
     uint8_t hp_cut, hp_mg;                       /* the high-pass: CUTOFF, the MG sweeps it */
-    uint8_t rsv[3];
+    uint8_t bpm;                                 /* the sequencer's tempo (its own clock), 40..240 */
+    uint8_t rsv[2];
 } p8g_t;
 _Static_assert(sizeof(p8g_t) == 20u, "the global settings' layout");
 static p8g_t p8g_saved;                          /* as in flash (or as at power-on, none there) */
@@ -140,6 +141,7 @@ static void p8g_now(p8g_t *g)
     g->ph[2] = (uint8_t)p8.set[P800_PH_DEPTH], g->ph[3] = (uint8_t)p8.set[P800_PH_FB], g->ph[4] = ue.ph_mix;
     g->ec[0] = ec.delay, g->ec[1] = ec.repeat, g->ec[2] = ec.balance, g->ec[3] = ec.age;
     g->hp_cut = (uint8_t)p8.set[P800_HP_CUT], g->hp_mg = (uint8_t)p8.set[P800_HP_MG];
+    g->bpm = (uint8_t)song.g[G_BPM];
 }
 
 /* at power-on: the settings as last saved (each held to its range), the program last chosen; none: as they are */
@@ -159,6 +161,8 @@ static uint32_t p8g_boot(void)
     ec.balance = (uint8_t)(g.ec[2] > 10u ? 10u : g.ec[2]), ec.age = (uint8_t)(g.ec[3] > 10u ? 10u : g.ec[3]);
     p800_set(P800_HP_CUT, g.hp_cut > 99u ? 99 : g.hp_cut);
     p800_set(P800_HP_MG, g.hp_mg != 0);
+    if (g.bpm >= 40u && g.bpm <= 240u)           /* (0: saved before the sequencer, v0.9.x: as it is) */
+        song.g[G_BPM] = g.bpm;
     p8g_now(&p8g_saved);
     p8g_saved.slot = g.slot;
     return g.slot % P8S_NSLOT;
@@ -191,4 +195,53 @@ static void p8g_poll(void)
     p8g_due = 0;
     if (!st_save(OBJ_P8GLOB, &g, sizeof g))
         p8g_saved = g;
+}
+
+/* ------------------------------------------------------------------ the sequence --- */
+#define P8Q_MAGIC 0x31513850u                    /* "P8Q1" */
+typedef struct {
+    uint32_t magic;
+    uint16_t len, nsteps, nnotes, rsv;
+    uint8_t buf[SQ_BYTES];
+} p8q_t;
+_Static_assert(sizeof(p8q_t) <= ST_PAYLOAD_MAX, "the sequence fits one storage object");
+_Static_assert(sizeof rev_comb >= sizeof(p8q_t), "its scratch fits Felucca's reverb buffer");
+
+/* the sequence entered, to flash (seq800.c sq); 0 when done */
+static int p8q_save(void)
+{
+    p8q_t *q = (p8q_t *)(void *)rev_comb;
+    int rc;
+    memset(q, 0, sizeof *q);
+    q->magic = P8Q_MAGIC, q->len = sq.len, q->nsteps = sq.nsteps, q->nnotes = sq.nnotes;
+    memcpy(q->buf, sq.buf, sq.len);
+    rc = st_save(OBJ_P8SEQ, q, sizeof *q);
+    if (!rc)
+        sq.dirty = 0;
+    return rc;
+}
+
+/* power-on: the sequence as saved, if whole (every step read back to its counts); none: empty */
+static void p8q_load(void)
+{
+    p8q_t *q = (p8q_t *)(void *)rev_comb;
+    uint32_t i = 0, steps = 0, notes = 0;
+    sq_clear();
+    if (st_load(OBJ_P8SEQ, q, sizeof *q) != (int)sizeof *q || q->magic != P8Q_MAGIC || q->len > SQ_BYTES)
+        return;
+    while (i < q->len) {
+        uint32_t b = q->buf[i];
+        if (b == SQ_REST || b == SQ_TIE) {
+            i++;
+        } else if (b <= SQ_CHORD) {
+            i += 1u + b, notes += b;
+        } else {
+            return;
+        }
+        steps++;
+    }
+    if (i != q->len || steps != q->nsteps || notes != q->nnotes || steps > SQ_MAXS || notes > SQ_MAXN)
+        return;
+    memcpy(sq.buf, q->buf, q->len);
+    sq.len = q->len, sq.nsteps = q->nsteps, sq.nnotes = q->nnotes;
 }
