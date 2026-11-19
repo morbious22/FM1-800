@@ -216,3 +216,8 @@ now fixed (x1) and KNOB 4 on the ECHO page is AGE, 0..10, the tape from new to w
 repeat more), and from AGE 4 dropouts (the level dipping up to 3 dB, ~20 a second). No hiss. REPEAT 10 is now 1.15
 (the playback's filter takes some back: it still runs away). AGE 0 / 10 on a steady 1 kHz echo: the time between
 crossings spreads 0.036 / 0.851 samples, the level swings 0.0 / 3.1 dB; a burst's echo has less than half the top end.
+
+**The high-pass on its own page (v0.9.3).** Held GLO combinations were fiddly while playing. GLO tapped (pressed
+and let go, nothing else touched meanwhile) now opens a HIGH-PASS page that stays: SELECT on / off, KNOB 1 CUTOFF,
+KNOB 2 the MG sweep on (clockwise) / off. GLO tapped again (or FX, on to PHASER) leaves. GLO held with another control
+is as before (tuning, STAGES, the bank jump, the restore) and opens no page. FM1_HP=0 builds: a tap does nothing.

@@ -290,26 +290,41 @@ int main(int argc, char **argv)
     {                                             /* the high-pass on GLO (FM1_HP builds; FM1_HP=0: nothing) */
         uint32_t g = 1u << panel.btn[B_GLO];
         u8t_ok(!p8.set[P800_HP_ON] && p8.set[P800_HP_MG], "at power-on the high-pass is off (the MG ready to sweep it)");
-        fm1_in.buttons |= g;
-        u8_input();
-        u8t_tap(B_SCL);                           /* (u8t_tap leaves GLO held: it only lets go of SEL) */
+        uint32_t pg0 = ue.page;
+        u8t_tap(B_GLO);                           /* a tap: pressed and let go, nothing else touched */
 #if FM1_HP
-        u8t_ok(p8.set[P800_HP_ON] && ue.view == UV_HP, "GLO + SEL: the high-pass on, shown");
-        u8t_turn(EN_K2, 50);
-        u8t_ok(p8.set[P800_HP_CUT] == 75, "GLO + KNOB 2: its cutoff 25 -> 75");
-        u8t_tap(B_LFO);
-        u8t_ok(!p8.set[P800_HP_MG], "GLO + LFO: the MG no longer sweeps it");
+        u8t_ok(ue.page == PG_HP, "GLO tapped: the HIGH-PASS page, and it stays");
+        u8_input(), u8_input();
+        u8t_ok(ue.page == PG_HP, "(still there, GLO up: no holding while playing)");
+        u8t_turn(EN_SELECT, 1);
+        u8t_ok(p8.set[P800_HP_ON], "SELECT clockwise: the high-pass on");
+        u8t_turn(EN_K1, 50);
+        u8t_ok(p8.set[P800_HP_CUT] == 75, "KNOB 1: its cutoff 25 -> 75");
+        u8t_turn(EN_K2, -1);
+        u8t_ok(!p8.set[P800_HP_MG], "KNOB 2 anticlockwise: the MG no longer sweeps it");
         u8_draw();
         snprintf(path, sizeof path, "%s/hpf.ppm", out);
         u8t_dump(path);
-        u8t_tap(B_LFO);
-        u8t_ok(p8.set[P800_HP_MG], "GLO + LFO again: it does");
+        u8t_turn(EN_K2, 1);
+        u8t_ok(p8.set[P800_HP_MG], "KNOB 2 clockwise: it does");
+        u8t_tap(B_GLO);
+        u8t_ok(ue.page == PG_HOME, "GLO tapped again: home");
+        fm1_in.buttons |= g;                      /* GLO held + KNOB 1 (the tuning), let go: no page */
+        u8_input();
+        u8t_turn(EN_K1, 2);
+        fm1_in.buttons &= ~g;
+        u8_input();
+        u8t_ok(ue.page == PG_HOME && p8.set[P800_TUNE] == 2, "GLO held + KNOB 1: the tuning; letting go opens no page");
+        p800_set(P800_TUNE, 0);
+        u8t_tap(B_GLO), u8t_tap(B_FX);
+        u8t_ok(ue.page == PG_PHASER, "from the HIGH-PASS page FX goes on to the PHASER page");
+        u8t_tap(B_FX), u8t_tap(B_FX);
+        u8t_ok(ue.page == PG_HOME, "(and round home)");
+        (void)pg0;
         {                                         /* and it is heard: a low note thinner with it on */
             int32_t o[2 * CTL];
             uint32_t b, i, on;
             double e[2];
-            fm1_in.buttons &= ~g;
-            u8_input();
             ue.view = UV_NONE;
             u8_load(0);                           /* (STRINGS as stored: the walk through every parameter above left
                                                    * it edited, its noise at full) */
@@ -329,9 +344,7 @@ int main(int argc, char **argv)
         }
         p800_set(P800_HP_ON, 0), p800_set(P800_HP_CUT, 25);
 #else
-        u8t_ok(!p8.set[P800_HP_ON], "FM1_HP=0: GLO + SEL does nothing (no high-pass in this build)");
-        fm1_in.buttons &= ~g;
-        u8_input();
+        u8t_ok(ue.page == pg0 && !p8.set[P800_HP_ON], "FM1_HP=0: GLO tapped does nothing (no high-pass in this build)");
 #endif
     }
     for (i = 0; i < 4u; i++) {

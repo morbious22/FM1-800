@@ -22,9 +22,11 @@
  * RATE, DEPTH, FEEDBACK, MIX (0..10); GLO + KNOB 1 its STAGES (2..12); off at power-on. Then the ECHO page (echo800.c, the tape
  * echo, off at power-on): SELECT on / off, KNOB 1..4 DELAY (shown in ms), REPEAT, BALANCE, AGE (0..10).
  * FX is lit while either is on.
- * FM1_HP builds (the owner's own; FM1_HP=0 leaves it out): the high-pass add-on, one setting for every program, on
- * GLO: GLO + SEL switches it on / off, GLO + KNOB 2 its CUTOFF (0..99), GLO + LFO whether the MG sweeps it (with the
- * low-pass, as the page). Shown in the lower half while GLO is held; HPF at the bottom while it is on.
+ * FM1_HP builds (the owner's own; FM1_HP=0 leaves it out): the high-pass add-on, one setting for every program, on its
+ * own page: GLO tapped (pressed and let go, nothing else touched meanwhile) opens it and stays (v0.9.3: no holding
+ * while playing), tapped again (or FX) leaves. On it SELECT clockwise on, anticlockwise off; KNOB 1 its CUTOFF
+ * (0..99); KNOB 2 clockwise the MG sweeps it (with the low-pass, as the page), anticlockwise not. HPF at the bottom of
+ * the home screen while it is on. GLO held with another control is as before (tuning, STAGES, banks, restore).
  * HOME held: the CPU, now and its peak since HOME went down, and the overruns since power-on (audio.c: a half of the
  * audio not ready in time, heard as a crackle; a crackle with none is something else, such as a flash erase).
  * The lights (u8_leds, in place of Felucca's ui_leds): every button and key glows dim, FX lit with the phaser on, OCT-
@@ -246,12 +248,14 @@ static p800_prog_t u8_ed;                        /* the program playing: its slo
                                                   * here; the
                                                   * Poly-800 plays it while p8.pg points here. A new program: gone */
 enum { UV_NONE, UV_PAR, UV_TUNE, UV_HP, UV_CPU };
-enum { PG_HOME, PG_PHASER, PG_ECHO };
+enum { PG_HOME, PG_PHASER, PG_ECHO, PG_HP };
 static struct {
     uint8_t sel, view, prog, page, ph_on, ph_set, ph_mix;
     uint8_t slot, edited, loaded;                /* step 8: the slot playing (0..63 bank A, 64..127 bank B), edited
                                                   * since it was loaded or saved, the first load done */
     uint8_t save, dest;                          /* SAVE: what it is asking (U8S_*), the slot it would write */
+    uint8_t glo_prev, glo_used;                  /* GLO down last frame; something else used while it was down (then
+                                                  * letting go is no tap: the high-pass page does not open) */
     char dest_name[24];                          /* .. the name of what is in it now */
     const char *msg;                             /* a word for a moment (SAVED, RESTORED, ..) */
     uint32_t msg_ms;
@@ -352,8 +356,8 @@ static uint32_t u8_sig_bot(void)
     else if (ue.view == UV_TUNE)
         sig += (uint32_t)(p8.set[P800_TUNE] + 50) * 7919u;
     sig += (uint32_t)p8.set[P800_HP_ON] * 7u + (uint32_t)p8.set[P800_HP_MG] * 70001u;
-    if (ue.view == UV_HP)
-        sig += (uint32_t)p8.set[P800_HP_CUT] * 311u;
+    if (ue.page == PG_HP)
+        sig += (uint32_t)p8.set[P800_HP_CUT] * 311u + 4999u;
     if (ue.view == UV_CPU)
         sig += u8_cpu_now() * 1000003u + u8_cpu_peak() * 3001u +
                U8_LATE * 7u;
@@ -426,17 +430,15 @@ static void u8_draw(void)
                 u8_text(cx - text_w(&AF_L, v) / 2, 188, &AF_L, v,
                         c == 2u && U8_LATE ? u8_rgb(255, 230, 120) : u8_rgb(120, 240, 255));
             }
-        } else if (ue.view == UV_HP) {           /* GLO held: the high-pass (FM1_HP) */
+        } else if (ue.page == PG_HP) {           /* the high-pass's page (FM1_HP): on / off, KNOB 1 and 2 */
             u8_text(10, 152, &AF_S, "HIGH-PASS", u8_rgb(255, 170, 230));
             u8_text(230 - text_w(&AF_L, p8.set[P800_HP_ON] ? "ON" : "OFF"), 148, &AF_L, p8.set[P800_HP_ON] ? "ON" : "OFF",
                     p8.set[P800_HP_ON] ? u8_rgb(120, 240, 255) : u8_rgb(150, 120, 170));
             fmt_int(v, p8.set[P800_HP_CUT]);
-            u8_text(30 - text_w(&AF_S, "SEL") / 2, 186, &AF_S, "SEL", u8_rgb(255, 170, 230));
-            u8_text(30 - text_w(&AF_S, "ON/OFF") / 2, 202, &AF_S, "ON/OFF", u8_rgb(255, 255, 255));
-            u8_text(90 - text_w(&AF_S, "CUTOFF") / 2, 186, &AF_S, "CUTOFF", u8_rgb(255, 170, 230));
-            u8_text(90 - text_w(&AF_M, v) / 2, 199, &AF_M, v, u8_rgb(255, 255, 255));
-            u8_text(180 - text_w(&AF_S, "LFO: MG SWEEP") / 2, 186, &AF_S, "LFO: MG SWEEP", u8_rgb(255, 170, 230));
-            u8_text(180 - text_w(&AF_M, p8.set[P800_HP_MG] ? "ON" : "OFF") / 2, 199, &AF_M,
+            u8_text(30 - text_w(&AF_S, "CUTOFF") / 2, 186, &AF_S, "CUTOFF", u8_rgb(255, 170, 230));
+            u8_text(30 - text_w(&AF_M, v) / 2, 199, &AF_M, v, u8_rgb(255, 255, 255));
+            u8_text(90 - text_w(&AF_S, "MG SWEEP") / 2, 186, &AF_S, "MG SWEEP", u8_rgb(255, 170, 230));
+            u8_text(90 - text_w(&AF_M, p8.set[P800_HP_MG] ? "ON" : "OFF") / 2, 199, &AF_M,
                     p8.set[P800_HP_MG] ? "ON" : "OFF", u8_rgb(255, 255, 255));
         } else if (ue.page == PG_PHASER) {       /* the phaser: on / off, STAGES, and KNOB 1..4's values in four columns */
             static const char *const L[4] = {"RATE", "DEPTH", "FEEDBACK", "MIX"};
@@ -523,6 +525,10 @@ static void u8_input(void)
     (void)fm1_input_note_edges();                /* (the keys play from seq.c: their edges are nobody's here) */
     if (!u8.booted)                              /* (the time as it is: one ahead, the 4 s would wrap round) */
         u8.booted = 1, u8.boot_ms = fm1_ms;
+    if (glo && !ue.glo_prev)                     /* GLO down: a tap, unless something else is used before it lets go */
+        ue.glo_used = 0;
+    if (glo && (pressed & ~(1u << panel.btn[B_GLO])))
+        ue.glo_used = 1;
     if (!ue.ph_set) {                            /* the phaser: off at power-on (the Poly-800 as it was: no phaser,
                                                   * no echo, only each program's own chorus), ready at the page's MIX */
         ue.ph_set = 1;
@@ -596,41 +602,42 @@ static void u8_input(void)
         return;
     }
     if ((pressed >> panel.btn[B_FX]) & 1u) {     /* FX: the PHASER page, the ECHO page, and back */
-        ue.page = ue.page == PG_HOME ? PG_PHASER : ue.page == PG_PHASER ? PG_ECHO : PG_HOME;
+        ue.page = ue.page == PG_HOME || ue.page == PG_HP ? PG_PHASER : ue.page == PG_PHASER ? PG_ECHO : PG_HOME;
         if (ue.view == UV_TUNE) ue.view = UV_PAR;
     }
     if ((s = panel_enc(EN_PRESET)) != 0) {       /* PRESETS: the program, round the 128 (A11..A88, B11..B88; its
                                                   * edits gone); GLO + PRESETS: the other bank's same number */
         int32_t p = ((int32_t)ue.slot + (glo ? s * 64 : s)) % 128;
+        ue.glo_used |= (uint8_t)glo;
         u8_load((uint32_t)(p < 0 ? p + 128 : p));
         ue.view = UV_NONE;                       /* (the program alone; SELECT keeps its place) */
     }
     ue.prog = trk[0].preset;
 #if FM1_HP
-    if (glo) {                                   /* GLO held: the high-pass (GLO + SEL, KNOB 2, LFO) */
-        uint32_t hp_k = 0;
-        if ((pressed >> panel.btn[B_SCL]) & 1u)  /* (B_SCL: the button printed SEL) */
-            p800_set(P800_HP_ON, !p8.set[P800_HP_ON]), hp_k = 1;
-        if ((pressed >> panel.btn[B_LFO]) & 1u)
-            p800_set(P800_HP_MG, !p8.set[P800_HP_MG]), hp_k = 1;
-        if ((s = panel_enc(EN_K2)) != 0) {
+    if (!glo && ue.glo_prev && !ue.glo_used)     /* GLO tapped: the high-pass's page, or back home */
+        ue.page = ue.page == PG_HP ? PG_HOME : PG_HP;
+#endif
+    ue.glo_prev = (uint8_t)glo;
+    if (ue.page == PG_HP) {                      /* the high-pass's page: SELECT on / off, KNOB 1 CUTOFF, KNOB 2 MG */
+        if ((s = panel_enc(EN_SELECT)) != 0)
+            p800_set(P800_HP_ON, s > 0);
+        if ((s = panel_enc(EN_K1)) != 0) {
             int32_t c = p8.set[P800_HP_CUT] + s;
             p800_set(P800_HP_CUT, c < 0 ? 0 : c > 99 ? 99 : c);
-            hp_k = 1;
         }
-        if (hp_k)
-            ue.view = UV_HP;
-    }
-#endif
-    if (!glo && ue.view == UV_HP)                /* GLO let go: back to what was shown */
-        ue.view = UV_PAR;
-    if (ue.page == PG_PHASER) {                  /* the phaser's page: SELECT on / off, KNOB 1..4, GLO + KNOB 1 */
+        if ((s = panel_enc(EN_K2)) != 0)
+            p800_set(P800_HP_MG, s > 0);
+        for (k = EN_K3; k < NE; k++)
+            (void)panel_enc(k);
+        (void)panel_enc(EN_ALGO);
+    } else if (ue.page == PG_PHASER) {                  /* the phaser's page: SELECT on / off, KNOB 1..4, GLO + KNOB 1 */
         static const uint8_t ID[4] = {P800_PH_RATE, P800_PH_DEPTH, P800_PH_FB, P800_PH_MIX};
         if ((s = panel_enc(EN_SELECT)) != 0)
             ue.ph_on = s > 0;
         for (k = 0; k < 4u; k++)
             if ((s = panel_enc(EN_K1 + k)) != 0) {
                 uint32_t id = glo && !k ? P800_PH_STAGES : ID[k], mx = id == P800_PH_STAGES ? 5u : 10u;
+                ue.glo_used |= (uint8_t)(glo && !k);
                 int32_t v = (id == P800_PH_MIX ? ue.ph_mix : p8.set[id]) + s;
                 v = v < 0 ? 0 : v > (int32_t)mx ? (int32_t)mx : v;
                 if (id == P800_PH_MIX)
@@ -659,6 +666,7 @@ static void u8_input(void)
     if ((s = panel_enc(EN_K1)) != 0) {           /* KNOB 1: its value; with GLO held, the tuning */
         if (glo) {
             int32_t t = p8.set[P800_TUNE] + s;
+            ue.glo_used = 1;
             p800_set(P800_TUNE, t < -50 ? -50 : t > 50 ? 50 : t);
             ue.view = UV_TUNE;
         } else {
