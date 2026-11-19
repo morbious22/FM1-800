@@ -268,8 +268,8 @@ int main(int argc, char **argv)
         u8t_turn(EN_SELECT, 1);
         u8t_ok(ec.on, "SELECT clockwise: the echo on");
         u8t_turn(EN_K1, -10), u8t_turn(EN_K2, 2), u8t_turn(EN_K3, 1), u8t_turn(EN_K4, 5);
-        u8t_ok(ec.delay == 40 && ec.repeat == 6 && ec.balance == 5 && ec.drive == 2,
-               "KNOB 1..4: DELAY 40, REPEAT 6, BALANCE 5, INPUT 40 dB (held at its last)");
+        u8t_ok(ec.delay == 40 && ec.repeat == 6 && ec.balance == 5 && ec.age == 8,
+               "KNOB 1..4: DELAY 40, REPEAT 6, BALANCE 5, AGE 3 -> 8");
         u8t_ok(p8.set[P800_PH_RATE] == 7 && ue.ph_on, "the phaser as it was set");
         u8_draw();
         snprintf(path, sizeof path, "%s/echo.ppm", out);
@@ -420,7 +420,7 @@ int main(int argc, char **argv)
         {                                         /* the global settings: saved 3 s after a change, back at power-on */
             uint32_t t;
             u8_load(70);
-            p800_set(P800_PH_RATE, 9), ue.ph_mix = 8, ec.delay = 77, ec.drive = 1, p800_set(P800_TUNE, -12);
+            p800_set(P800_PH_RATE, 9), ue.ph_mix = 8, ec.delay = 77, ec.age = 7, p800_set(P800_TUNE, -12);
             p800_set(P800_HP_CUT, 60), p800_set(P800_HP_MG, 0);
             ue.ph_on = 1, ec.on = 1, p800_set(P800_PH_MIX, 8), p800_set(P800_HP_ON, 1);
             int32_t o[2 * CTL];
@@ -433,9 +433,9 @@ int main(int argc, char **argv)
             u8t_ok(u8t_erases == er + 1u, "3 s after the last change (all silent): written, once");
             p800_init();                          /* power-off, power-on */
             memset(&ue, 0, sizeof ue);
-            ec.on = 0, ec.delay = 50, ec.drive = 0;
+            ec.on = 0, ec.delay = 50, ec.age = 3;
             u8_input();
-            u8t_ok(ue.slot == 70u && p8.set[P800_PH_RATE] == 9 && ue.ph_mix == 8 && ec.delay == 77 && ec.drive == 1 &&
+            u8t_ok(ue.slot == 70u && p8.set[P800_PH_RATE] == 9 && ue.ph_mix == 8 && ec.delay == 77 && ec.age == 7 &&
                        p8.set[P800_TUNE] == -12 && p8.set[P800_HP_CUT] == 60 && !p8.set[P800_HP_MG],
                    "power-on: the program last chosen (B17), the tuning, the phaser's, echo's and high-pass's settings");
             u8t_ok(!ue.ph_on && !p8.set[P800_PH_MIX] && !ec.on && !p8.set[P800_HP_ON],

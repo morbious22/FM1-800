@@ -121,7 +121,7 @@ typedef struct {
     uint8_t slot;                                /* the program last chosen */
     int8_t tune;                                 /* -50 .. +50 cents */
     uint8_t ph[5];                               /* the phaser: STAGES, RATE, DEPTH, FEEDBACK, MIX */
-    uint8_t ec[4];                               /* the echo: DELAY, REPEAT, BALANCE, INPUT */
+    uint8_t ec[4];                               /* the echo: DELAY, REPEAT, BALANCE, AGE */
     uint8_t hp_cut, hp_mg;                       /* the high-pass: CUTOFF, the MG sweeps it */
     uint8_t rsv[3];
 } p8g_t;
@@ -138,7 +138,7 @@ static void p8g_now(p8g_t *g)
     g->tune = (int8_t)p8.set[P800_TUNE];
     g->ph[0] = (uint8_t)p8.set[P800_PH_STAGES], g->ph[1] = (uint8_t)p8.set[P800_PH_RATE];
     g->ph[2] = (uint8_t)p8.set[P800_PH_DEPTH], g->ph[3] = (uint8_t)p8.set[P800_PH_FB], g->ph[4] = ue.ph_mix;
-    g->ec[0] = ec.delay, g->ec[1] = ec.repeat, g->ec[2] = ec.balance, g->ec[3] = ec.drive;
+    g->ec[0] = ec.delay, g->ec[1] = ec.repeat, g->ec[2] = ec.balance, g->ec[3] = ec.age;
     g->hp_cut = (uint8_t)p8.set[P800_HP_CUT], g->hp_mg = (uint8_t)p8.set[P800_HP_MG];
 }
 
@@ -156,7 +156,7 @@ static uint32_t p8g_boot(void)
     p800_set(P800_PH_FB, g.ph[3] > 10u ? 10 : g.ph[3]);
     ue.ph_mix = (uint8_t)(g.ph[4] > 10u ? 10u : g.ph[4]);
     ec.delay = (uint8_t)(g.ec[0] > 99u ? 99u : g.ec[0]), ec.repeat = (uint8_t)(g.ec[1] > 10u ? 10u : g.ec[1]);
-    ec.balance = (uint8_t)(g.ec[2] > 10u ? 10u : g.ec[2]), ec.drive = (uint8_t)(g.ec[3] > 2u ? 2u : g.ec[3]);
+    ec.balance = (uint8_t)(g.ec[2] > 10u ? 10u : g.ec[2]), ec.age = (uint8_t)(g.ec[3] > 10u ? 10u : g.ec[3]);
     p800_set(P800_HP_CUT, g.hp_cut > 99u ? 99 : g.hp_cut);
     p800_set(P800_HP_MG, g.hp_mg != 0);
     p8g_now(&p8g_saved);

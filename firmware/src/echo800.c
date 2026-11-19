@@ -1,16 +1,16 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 morbious22 (FM1-800) */
 /* FM1-800: the tape echo, after the Poly-800 (fx.c mix_block, the FM-1's build). Its controls are those of a small
- * 1970s tape echo: DELAY, REPEAT, BALANCE and an input switch, 0 / 20 / 40 dB, read here as how hard the tape is
- * driven; its VOLUME is MASTER. Tuned by ear (it is not on the page). Mono, as such a unit, into both sides.
+ * 1970s tape echo, DELAY, REPEAT, BALANCE (its VOLUME is MASTER), and in place of its input switch (20 and 40 dB were
+ * noisy: v0.9.2) AGE, the tape from new to worn. Tuned by ear (it is not on the page). Mono, as such a unit, into
+ * both sides.
  *
- *   the input (both sides' mean), raised by the switch (x1, x3, x9: as a real unit's input stage, before the tape),
- *   and the repeats go onto the tape through its saturation (the soft clip's tanh, at most the tape's full level): at
- *   0 dB a loud chord just warms it, at 20 dB it squashes, at 40 dB it is gritty and the echo louder; the repeats go
- *   round without the switch's gain, so it does not make the loop run away sooner,
- *   the tape is read DELAY later (40 ms .. 1 s, round the curve of the knob), wavering a little (wow ~0.6 Hz,
- *   flutter ~7 Hz) and read between samples; each repeat goes back through a low-pass (~2 kHz) and a high-pass
- *   (~120 Hz), so they darken and thin as they go round. REPEAT sets how much comes back (0 .. 1.08: at the top it
+ *   the input (both sides' mean) and the repeats go onto the tape through its saturation (the soft clip's tanh, at most
+ *   the tape's full level: a loud chord just warms it),
+ *   the tape is read DELAY later (40 ms .. 1 s, round the curve of the knob), wavering (wow ~0.6 Hz, flutter ~7 Hz)
+ *   and read between samples; played back through a low-pass (the first echo a little duller), each repeat goes
+ *   round again through it and a ~110 Hz high-pass, so they darken and thin as they go. AGE (0..10) wears the tape: the waver from +-0.05 % to +-1.2 %, the low-pass from ~2.6 kHz
+ *   to ~0.9 kHz, and from AGE 4 dropouts, the level dipping now and then (to -3 dB at 10, ~20 a second). No hiss. REPEAT sets how much comes back (0 .. 1.15: at the top it
  *   runs away slowly, held by the saturation, as a tape echo does). A turn of DELAY slides the tape's speed, so the
  *   repeats bend in pitch. Off: no more input, the repeats die away; once the tape is quiet it costs nothing.
  *
@@ -31,12 +31,14 @@ static const uint16_t EC_DELAY[100] = {   /* DELAY 0..99: samples, 40 ms x 25^(v
 };
 
 static struct {
-    uint8_t on, delay, repeat, balance, drive;   /* the controls: DELAY 0..99, REPEAT 0..10, BALANCE 0..10, INPUT 0..2 */
+    uint8_t on, delay, repeat, balance, age;     /* the controls: DELAY 0..99, REPEAT 0..10, BALANCE 0..10, AGE 0..10 */
     uint32_t w, wow, flt, quiet;                 /* the tape's write place; wow and flutter phases; quiet samples */
     int32_t d;                                   /* the tape's delay now, Q8 samples (it slides to DELAY's) */
+    uint32_t rng;                                /* the dropouts' chance */
+    int32_t dg, dt;                              /* .. their gain now and where it heads (Q15) */
     int32_t lp, hpx, hpy;                        /* the repeats' low-pass and high-pass, 8 bits finer than the tape
                                                   * (so what is left of a repeat dies to exactly 0: no hum) */
-} ec = {0, 50, 4, 4, 0, 0, 0, 0, EC_LEN, 0, 0, 0, 0};
+} ec = {0, 50, 4, 4, 3, 0, 0, 0, EC_LEN, 0, 1, 32768, 32768, 0, 0, 0};
 
 /* onto the tape: x (Q15, 32768 = the tape's full level) through its saturation, small-signal gain 1, never past */
 static int32_t ec_tape(int32_t x)
@@ -48,27 +50,38 @@ static int32_t ec_tape(int32_t x)
 static void echo_block(int32_t *l, int32_t *r, uint32_t n)
 {
     uint32_t i;
-    int32_t fb = ec.repeat * 3539,               /* Q15: REPEAT 10 = 1.08 */
+    int32_t fb = ec.repeat * 3768,               /* Q15: REPEAT 10 = 1.15 (the playback's filter takes some back) */
         dry = ec.balance >= 5u ? (10 - (int32_t)ec.balance) * 205 : 1024,     /* Q10: BALANCE 5 both full, */
         wet = ec.balance <= 5u ? (int32_t)ec.balance * 6554 : 32768,          /* (Q15) 0 dry alone, 10 echo alone */
-        target = (int32_t)EC_DELAY[ec.delay < 100u ? ec.delay : 99u] << 8;
+        target = (int32_t)EC_DELAY[ec.delay < 100u ? ec.delay : 99u] << 8,
+        age = ec.age > 10u ? 10 : (int32_t)ec.age,
+        wd = 10 + 23 * age,                      /* the waver: +-(0.05 + 0.115 x AGE) % */
+        lpa = 80 - 5 * age,                      /* the low-pass, Q8: ~2.6 kHz .. ~0.9 kHz */
+        dd = age > 3 ? (age - 3) * 1400 : 0;     /* the dropouts' depth, Q15: to -3 dB */
     if (!ec.on && ec.quiet > EC_LEN)             /* off and the tape silent: nothing to do */
         return;
     for (i = 0; i < n; i++) {
-        int32_t in = ec.on ? (l[i] + r[i]) * (ec.drive == 2u ? 9 : ec.drive == 1u ? 3 : 1) : 0;   /* (mean x 2: the
-                                                  * page's full scale to Q15's; the switch x1 / x3 / x9) */
+        int32_t in = ec.on ? (l[i] + r[i]) : 0;  /* (mean x 2: the page's full scale to Q15's) */
         int32_t wv = (p800_sin(ec.wow) * 3 + p800_sin(ec.flt)) >> 2;          /* the waver, Q15 */
-        int32_t d = ec.d + ((((ec.d >> 8) * wv) >> 15) * 256 / 500);   /* +-0.2 % (32-bit only: CPU.md) */
+        int32_t d = ec.d + (((((ec.d >> 8) * wv) >> 15) * wd) * 32 / 2500);   /* (x wd / 20000 x 256; 32-bit only) */
         int32_t di = d >> 8, fr = d & 255, a, b, rd, x, t;
         ec.d += (target - ec.d) >> 12;           /* the tape's speed slides to DELAY's (~90 ms) */
         ec.wow += 58000u, ec.flt += 680000u;     /* ~0.6 Hz, ~7 Hz */
         a = dly_buf[(ec.w - (uint32_t)di) & (EC_LEN - 1u)];
         b = dly_buf[(ec.w - (uint32_t)di - 1u) & (EC_LEN - 1u)];
         rd = a + (((b - a) * fr) >> 8);          /* the tape, between samples */
-        x = (rd * fb) >> 15;                     /* the repeat, darker and thinner each time round */
-        ec.lp += ((x << 8) - ec.lp) >> 2;        /* (~2 kHz one-pole) */
-        ec.hpy = ec.hpy - (ec.hpy >> 6) + ec.lp - ec.hpx;   /* (~110 Hz one-pole high-pass) */
-        ec.hpx = ec.lp;
+        if (!(ec.w & 2047u)) {                   /* a worn tape: now and then the level dips (~20 a second) */
+            ec.rng = ec.rng * 1664525u + 1013904223u;
+            ec.dt = 32768 - (int32_t)(((ec.rng >> 17) * (uint32_t)dd) >> 15);
+        }
+        ec.dg += (ec.dt - ec.dg) >> 8;
+        rd = (rd * (ec.dg >> 1)) >> 14;          /* (Q15 gain halved: the product under 2^31) */
+        ec.lp += (((rd << 8) - ec.lp) * lpa) >> 8;   /* the playback, duller with AGE (one-pole; under 2^31: 8.4e6 x 80):
+                                                  * the first echo a little, each repeat more */
+        rd = (ec.lp + 128) >> 8;
+        x = mulq30(ec.lp, fb << 15);             /* the repeat (8 bits finer), thinner each time round: */
+        ec.hpy = ec.hpy - (ec.hpy >> 6) + x - ec.hpx;   /* (~110 Hz one-pole high-pass) */
+        ec.hpx = x;
         t = ec_tape(in + ((ec.hpy + 128) >> 8));
         dly_buf[ec.w & (EC_LEN - 1u)] = (int16_t)(t > 32767 ? 32767 : t < -32768 ? -32768 : t);
         ec.w++;

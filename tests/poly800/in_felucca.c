@@ -178,27 +178,14 @@ int main(void)
     }
     {                                             /* the tape echo (echo800.c), straight through echo_block */
         static int32_t l[3 * P800_FS], r[3 * P800_FS];
-        uint32_t i, n = 3u * P800_FS / 32u * 32u, D, p1 = 0, p2 = 0, drv;   /* (whole blocks) */
-        int32_t a1 = 0, a2 = 0, small[3], big = 0;
+        uint32_t i, n = 3u * P800_FS / 32u * 32u, D = EC_DELAY[50], p1 = 0, p2 = 0, ag;   /* (whole blocks) */
+        int32_t a1 = 0, a2 = 0, big = 0;
         double hf1 = 0, hf2 = 0, e1 = 0, e2 = 0;
         ok(EC_DELAY[0] == 1764 && EC_DELAY[99] == 44100, "DELAY: 40 ms at 0 .. 1 s at 99");
-        for (drv = 0; drv < 3u; drv++) {         /* a quiet click, each INPUT setting: its echo at the same level */
-            memset(l, 0, sizeof l), memset(r, 0, sizeof r);
-            memset(dly_buf, 0, sizeof dly_buf);
-            ec.on = 1, ec.delay = 50, ec.repeat = 4, ec.balance = 5, ec.drive = (uint8_t)drv, ec.quiet = 0;
-            D = EC_DELAY[50];
-            ec.d = (int32_t)D << 8, ec.lp = ec.hpx = ec.hpy = 0, ec.w = ec.wow = ec.flt = 0;
-            l[100] = r[100] = 200;
-            for (i = 0; i < n; i += 32u) echo_block(l + i, r + i, 32u);
-            small[drv] = 0;
-            for (i = 100u + D - 200u; i < 100u + D + 200u; i++) small[drv] += abs(l[i]);
-        }
-        printf("  echo: a quiet click's first repeat at INPUT 0 / 20 / 40 dB: %d %d %d\n", small[0], small[1], small[2]);
-        ok(small[1] > small[0] * 5 / 2 && small[1] < small[0] * 7 / 2 && small[2] > small[0] * 8 && small[2] < small[0] * 10,
-           "INPUT raises what goes onto the tape: a quiet sound's echo x3 at 20 dB, x9 at 40 dB");
+        ec.delay = 50, ec.repeat = 4, ec.balance = 5;
         memset(l, 0, sizeof l), memset(r, 0, sizeof r);      /* a loud click: the repeats' times, levels, colour */
         memset(dly_buf, 0, sizeof dly_buf);
-        ec.on = 1, ec.drive = 0, ec.quiet = 0, ec.d = (int32_t)D << 8, ec.lp = ec.hpx = ec.hpy = 0, ec.w = ec.wow = ec.flt = 0;
+        ec.on = 1, ec.age = 0, ec.quiet = 0, ec.d = (int32_t)D << 8, ec.lp = ec.hpx = ec.hpy = 0, ec.w = ec.wow = ec.flt = 0;
         for (i = 100; i < 140u; i++) l[i] = r[i] = (i & 1u) ? 6000 : -6000;   /* (a bright burst) */
         for (i = 0; i < n; i += 32u) echo_block(l + i, r + i, 32u);
         for (i = 300u; i < 100u + D + D / 2u; i++) if (abs(l[i]) > a1) a1 = abs(l[i]), p1 = i;
@@ -210,34 +197,66 @@ int main(void)
         ok(p1 - 100u > D - D / 50u && p1 - 100u < D + D / 50u && p2 - 100u > 2u * D - D / 25u && p2 - 100u < 2u * D + D / 25u,
            "the repeats come at DELAY and twice DELAY (within the wow)");
         ok(a2 < a1 && hf2 / e2 < hf1 / e1, "each repeat softer and darker than the one before (less top end for its level)");
-        {                                         /* a loud chord: 40 dB squashes it (its echo far under x9) */
-            int32_t pk[3];
-            for (drv = 0; drv < 3u; drv += 2u) {
+        {                                         /* AGE: 0 a new tape, 10 a worn one */
+            double wob[2], top[2], dip[2];
+            for (ag = 0; ag < 2u; ag++) {
+                double m = 0, v = 0, prev = 0, lo = 1e30, hi = 0;
+                uint32_t nz = 0, k;
                 memset(l, 0, sizeof l), memset(r, 0, sizeof r);
                 memset(dly_buf, 0, sizeof dly_buf);
-                ec.drive = (uint8_t)drv, ec.repeat = 0, ec.d = (int32_t)D << 8, ec.lp = ec.hpx = ec.hpy = 0, ec.w = ec.wow = ec.flt = 0;
-                for (i = 100; i < 4000u; i++) l[i] = r[i] = (int32_t)(p800_sin(i * 97391548u) / 2);   /* (~1 kHz, 0.5 x the page's full scale) */
-                for (i = 0; i < 8000u + D; i += 32u) echo_block(l + i, r + i, 32u);
-                pk[drv] = 0;
-                for (i = 100u + D + 500u; i < 3500u + D; i++) if (abs(l[i]) > pk[drv]) pk[drv] = abs(l[i]);
+                ec.age = (uint8_t)(ag * 10u), ec.repeat = 0, ec.balance = 10, ec.dg = ec.dt = 32768;
+                ec.d = (int32_t)D << 8, ec.lp = ec.hpx = ec.hpy = 0, ec.w = ec.wow = ec.flt = 0;
+                for (i = 0; i < n; i++) l[i] = r[i] = (int32_t)(p800_sin(i * 97391548u) / 4);   /* (~1 kHz, steady) */
+                for (i = 0; i < n; i += 32u) echo_block(l + i, r + i, 32u);
+                for (i = D + 4410u; i < n; i++)  /* the waver: the spread of the time between upward crossings */
+                    if (l[i - 1] < 0 && l[i] >= 0) {
+                        double t = i - 1 + (double)-l[i - 1] / (l[i] - l[i - 1]);
+                        if (prev) { m += t - prev, v += (t - prev) * (t - prev), nz++; }
+                        prev = t;
+                    }
+                wob[ag] = sqrt(v / nz - (m / nz) * (m / nz));
+                for (k = D + 4410u; k + 441u < n; k += 441u) {   /* the dropouts: the level of each 10 ms */
+                    double e = 0;
+                    for (i = k; i < k + 441u; i++) e += (double)l[i] * l[i];
+                    if (e < lo) lo = e;
+                    if (e > hi) hi = e;
+                }
+                dip[ag] = 10 * log10(hi / lo);
+                memset(l, 0, sizeof l), memset(r, 0, sizeof r);   /* the colour: a bright burst's echo */
+                memset(dly_buf, 0, sizeof dly_buf);
+                ec.d = (int32_t)D << 8, ec.lp = ec.hpx = ec.hpy = 0, ec.w = ec.wow = ec.flt = 0, ec.dg = ec.dt = 32768;
+                {                                 /* (white noise) */
+                    uint32_t z = 12345;
+                    for (i = 100; i < 600u; i++) z = z * 1664525u + 1013904223u, l[i] = r[i] = (int32_t)(z >> 20) - 2048;
+                }
+                for (i = 0; i < n; i += 32u) echo_block(l + i, r + i, 32u);
+                {
+                    double e = 0, h = 0;
+                    for (i = 100u + D - 200u; i < 100u + D + 900u; i++) e += (double)l[i] * l[i], h += (double)(l[i] - l[i - 1]) * (l[i] - l[i - 1]);
+                    top[ag] = h / e;
+                }
             }
-            printf("  echo: a loud tone's echo at INPUT 0 dB %d, at 40 dB %d (x%.1f, not x9)\n", pk[0], pk[2], (double)pk[2] / pk[0]);
-            ok(pk[2] > pk[0] && pk[2] < pk[0] * 3 && pk[2] <= 16384, "a loud sound at 40 dB: louder but squashed, never past the tape's full level");
+            printf("  echo AGE 0 / 10: waver %.3f / %.3f samples, level swing %.1f / %.1f dB, top end %.2f / %.2f\n",
+                   wob[0], wob[1], dip[0], dip[1], top[0], top[1]);
+            ok(wob[1] > 5 * wob[0], "AGE 10: the echo wavers far more than a new tape's");
+            ok(dip[1] > dip[0] + 1.5 && dip[1] < 6, "AGE 10: dropouts (the level dips, a few dB at most)");
+            ok(top[1] < top[0] * 0.6, "AGE 10: the echo duller");
+            ec.age = 3, ec.balance = 5, ec.repeat = 4;
         }
         memset(l, 0, sizeof l), memset(r, 0, sizeof r);      /* REPEAT 10, a loud burst: it runs away slowly */
         memset(dly_buf, 0, sizeof dly_buf);                  /* and the tape's saturation holds it */
-        ec.repeat = 10, ec.drive = 0, ec.delay = 10, ec.quiet = 0, ec.d = (int32_t)EC_DELAY[10] << 8;
+        ec.repeat = 10, ec.age = 3, ec.delay = 10, ec.quiet = 0, ec.d = (int32_t)EC_DELAY[10] << 8;
         for (i = 100; i < 4000u; i++) l[i] = r[i] = (int32_t)((i * 2654435761u) >> 16) - 32768;   /* (noise, 2 x full) */
         for (i = 0; i < n; i += 32u) echo_block(l + i, r + i, 32u);
         for (i = n - P800_FS; i < n; i++) if (abs(l[i]) > big) big = abs(l[i]);
         printf("  echo: REPEAT 10, 2 s after a loud burst: peak %d (the mix's full scale 16384)\n", big);
         ok(big > 2000 && big <= 16384 + 16384, "REPEAT 10 runs away and the tape's saturation holds it");
         ec.on = 0;                               /* off: no more input, the repeats die away, then it rests */
-        ec.repeat = 6, ec.drive = 0;
+        ec.repeat = 6;
         for (i = 0; i < n; i += 32u) { memset(l + i, 0, 128), memset(r + i, 0, 128); echo_block(l + i, r + i, 32u); }
         for (i = 0; i < n; i += 32u) { memset(l + i, 0, 128), memset(r + i, 0, 128); echo_block(l + i, r + i, 32u); }
         ok(ec.quiet > EC_LEN, "switched off, its repeats die away and the echo rests (costs nothing)");
-        ec.repeat = 4, ec.balance = 4, ec.delay = 50, ec.drive = 0;
+        ec.repeat = 4, ec.balance = 4, ec.delay = 50, ec.age = 3;
     }
 #else
     init(idx12);                                  /* a switch to another engine with a note held: let go, then silent */

@@ -209,3 +209,10 @@ the FM-1's build (`main.c`; it saved Felucca's song, which this build does not u
 (`prog800.c p8g_poll`) are written only in silence: no key or note held, the Poly-800 resting, the echo's tape
 quiet. Only SAVE writes under a sound, when asked. HOME held shows the CPU now, its peak since HOME went down and
 the overruns since power-on (audio.c), to tell a CPU overload (overruns) from anything else.
+
+**AGE in place of INPUT (v0.9.2).** The input switch's 20 and 40 dB raised the noise with the signal. The input is
+now fixed (x1) and KNOB 4 on the ECHO page is AGE, 0..10, the tape from new to worn: its waver from +-0.05 % to
++-1.2 %, its playback low-pass from ~2.6 kHz to ~0.9 kHz (now on the playback: the first echo a little duller, each
+repeat more), and from AGE 4 dropouts (the level dipping up to 3 dB, ~20 a second). No hiss. REPEAT 10 is now 1.15
+(the playback's filter takes some back: it still runs away). AGE 0 / 10 on a steady 1 kHz echo: the time between
+crossings spreads 0.036 / 0.851 samples, the level swings 0.0 / 3.1 dB; a burst's echo has less than half the top end.

@@ -20,7 +20,7 @@
  * Step 7c, the effects: FX goes to the PHASER page and back (the echo's page will sit between). The phaser is one
  * setting for every program, as a pedal on the floor: SELECT clockwise switches it on, anticlockwise off; KNOB 1..4
  * RATE, DEPTH, FEEDBACK, MIX (0..10); GLO + KNOB 1 its STAGES (2..12); off at power-on. Then the ECHO page (echo800.c, the tape
- * echo, off at power-on): SELECT on / off, KNOB 1..4 DELAY (shown in ms), REPEAT, BALANCE, INPUT (0 / 20 / 40 dB).
+ * echo, off at power-on): SELECT on / off, KNOB 1..4 DELAY (shown in ms), REPEAT, BALANCE, AGE (0..10).
  * FX is lit while either is on.
  * FM1_HP builds (the owner's own; FM1_HP=0 leaves it out): the high-pass add-on, one setting for every program, on
  * GLO: GLO + SEL switches it on / off, GLO + KNOB 2 its CUTOFF (0..99), GLO + LFO whether the MG sweeps it (with the
@@ -342,7 +342,7 @@ static uint32_t u8_sig_bot(void)
                    (uint32_t)(fm1_ms - u8.boot_ms < 4000u) * 61u + ue.view * 131u + ue.page * 977u;
     sig += (uint32_t)ec.on * 49999u;
     if (ue.page == PG_ECHO)
-        sig += ec.delay * 11u + ec.repeat * 1201u + ec.balance * 13001u + ec.drive * 150001u;
+        sig += ec.delay * 11u + ec.repeat * 1201u + ec.balance * 13001u + ec.age * 150001u;
     else if (ue.page == PG_PHASER)
         sig += (uint32_t)p8.set[P800_PH_STAGES] * 11u + (uint32_t)p8.set[P800_PH_RATE] * 101u +
                (uint32_t)p8.set[P800_PH_DEPTH] * 1103u + (uint32_t)p8.set[P800_PH_FB] * 12011u + ue.ph_mix * 130003u;
@@ -456,8 +456,7 @@ static void u8_draw(void)
                 u8_text(cx - text_w(&AF_M, v) / 2, 199, &AF_M, v, u8_rgb(255, 255, 255));
             }
         } else if (ue.page == PG_ECHO) {         /* the echo: on / off, KNOB 1..4's values in four columns */
-            static const char *const L[4] = {"DELAY", "REPEAT", "BALANCE", "INPUT"};
-            static const char *const IN[3] = {"0 dB", "20 dB", "40 dB"};
+            static const char *const L[4] = {"DELAY", "REPEAT", "BALANCE", "AGE"};
             uint32_t c;
             u8_text(10, 152, &AF_S, "TAPE ECHO", u8_rgb(255, 170, 230));
             u8_text(230 - text_w(&AF_L, ec.on ? "ON" : "OFF"), 148, &AF_L, ec.on ? "ON" : "OFF",
@@ -467,14 +466,12 @@ static void u8_draw(void)
                 if (c == 0u) {
                     fmt_int(v, (int32_t)((EC_DELAY[ec.delay] * 10u + 220u) / 441u));
                     str_cpy(v + str_len(v), " ms", sizeof v - str_len(v));
-                } else if (c == 3u) {
-                    str_cpy(v, IN[ec.drive], sizeof v);
                 } else {
-                    fmt_int(v, c == 1u ? ec.repeat : ec.balance);
+                    fmt_int(v, c == 1u ? ec.repeat : c == 2u ? ec.balance : ec.age);
                 }
                 u8_text(cx - text_w(&AF_S, L[c]) / 2, 186, &AF_S, L[c], u8_rgb(255, 170, 230));
-                u8_text(cx - text_w(c == 0u || c == 3u ? &AF_S : &AF_M, v) / 2, c == 0u || c == 3u ? 202 : 199,
-                        c == 0u || c == 3u ? &AF_S : &AF_M, v, u8_rgb(255, 255, 255));
+                u8_text(cx - text_w(c == 0u ? &AF_S : &AF_M, v) / 2, c == 0u ? 202 : 199, c == 0u ? &AF_S : &AF_M, v,
+                        u8_rgb(255, 255, 255));
             }
         } else if (ue.view == UV_PAR) {          /* the parameter: its section, its name, its value */
             u8_val(v, ue.sel, u8_get(ue.sel));
@@ -648,8 +645,8 @@ static void u8_input(void)
             ec.on = s > 0;
         for (k = 0; k < 4u; k++)
             if ((s = panel_enc(EN_K1 + k)) != 0) {
-                uint8_t *c = k == 0u ? &ec.delay : k == 1u ? &ec.repeat : k == 2u ? &ec.balance : &ec.drive;
-                int32_t mx = k == 0u ? 99 : k == 3u ? 2 : 10, v = (int32_t)*c + s;
+                uint8_t *c = k == 0u ? &ec.delay : k == 1u ? &ec.repeat : k == 2u ? &ec.balance : &ec.age;
+                int32_t mx = k == 0u ? 99 : 10, v = (int32_t)*c + s;
                 *c = (uint8_t)(v < 0 ? 0 : v > mx ? mx : v);
             }
         (void)panel_enc(EN_ALGO);
