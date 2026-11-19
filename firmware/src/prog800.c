@@ -164,7 +164,16 @@ static uint32_t p8g_boot(void)
     return g.slot % P8S_NSLOT;
 }
 
-/* once a frame: a change to the settings is saved 3 s after the last one (so turning a knob writes once) */
+/* silence, as a flash erase needs (it stops the audio ~40 ms: heard as a crackle, the lights dim): no key held, no
+ * note held (keys or MIDI), the Poly-800 silent and resting (its tails, its noise, eng_p800.c's last second), the
+ * echo's tape quiet */
+static int p8g_quiet(void)
+{
+    return !fm1_in.notes && !fm1_in.buttons && !p8.nheld && !p800_busy() && !p8e_live && ec.quiet > EC_LEN;
+}
+
+/* once a frame: a change to the settings is saved 3 s after the last one (so turning a knob writes once), and then
+ * only in silence: never under a sound */
 static void p8g_poll(void)
 {
     p8g_t g;
@@ -177,7 +186,7 @@ static void p8g_poll(void)
         p8g_due = fm1_ms + 3000u;
         return;
     }
-    if ((int32_t)(fm1_ms - p8g_due) < 0)
+    if ((int32_t)(fm1_ms - p8g_due) < 0 || !p8g_quiet())
         return;
     p8g_due = 0;
     if (!st_save(OBJ_P8GLOB, &g, sizeof g))

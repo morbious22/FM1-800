@@ -267,7 +267,11 @@ static void fm1_main(void)
         ui_input();
 #endif
         settings_poll();                              /* queued settings save: only while stopped */
+#if !FM1_800
         autosave_poll();                              /* (1.2) the music, stopped and idle: project.c */
+#endif                                                /* (FM1-800: off. Its idea of quiet knows nothing of the
+                                                       * Poly-800's notes, tails or echo, so its erase (the audio
+                                                       * stopped ~40 ms) crackled; prog800.c saves what matters) */
         felucca_dbg.stage = 2;
 #if FM1_800
         u8_leds();

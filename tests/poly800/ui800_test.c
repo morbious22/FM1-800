@@ -10,6 +10,9 @@
  *   cc -O1 -w -DFM1_800=1 [the include paths] -Itests -o ui800_test tests/poly800/ui800_test.c -lm; ./ui800_test OUT */
 #define UI_TEST_MAIN ui_test_main
 #include "ui_test.c"
+static uint32_t u8t_max_us, u8t_late;            /* (the host's debug block has no audio counters: these stand in) */
+#define U8_MAX_US u8t_max_us
+#define U8_LATE u8t_late
 #include "../firmware/src/ui800.c"
 static uint8_t u8t_nor[0x100000];                /* the FM-1's 1 MiB of flash, erased; storage.c's hooks on it */
 static uint32_t u8t_erases;
@@ -420,11 +423,14 @@ int main(int argc, char **argv)
             p800_set(P800_PH_RATE, 9), ue.ph_mix = 8, ec.delay = 77, ec.drive = 1, p800_set(P800_TUNE, -12);
             p800_set(P800_HP_CUT, 60), p800_set(P800_HP_MG, 0);
             ue.ph_on = 1, ec.on = 1, p800_set(P800_PH_MIX, 8), p800_set(P800_HP_ON, 1);
+            int32_t o[2 * CTL];
+            uint32_t b;
             er = u8t_erases;
-            for (t = 0; t < 2000u; t += 16u) fm1_ms += 16u, u8_input();
+            song.master_q12 = 4096;               /* (the audio runs as on the FM-1: the echo shows its tape silent) */
+            for (t = 0; t < 2000u; t += 16u) { fm1_ms += 16u, u8_input(); for (b = 0; b < 22u; b++) mix_block(o, CTL); }
             u8t_ok(u8t_erases == er, "a change to the settings: not written at once");
-            for (t = 0; t < 2000u; t += 16u) fm1_ms += 16u, u8_input();
-            u8t_ok(u8t_erases == er + 1u, "3 s after the last change: written, once");
+            for (t = 0; t < 2000u; t += 16u) { fm1_ms += 16u, u8_input(); for (b = 0; b < 22u; b++) mix_block(o, CTL); }
+            u8t_ok(u8t_erases == er + 1u, "3 s after the last change (all silent): written, once");
             p800_init();                          /* power-off, power-on */
             memset(&ue, 0, sizeof ue);
             ec.on = 0, ec.delay = 50, ec.drive = 0;
@@ -438,6 +444,37 @@ int main(int argc, char **argv)
         u8_draw();
         snprintf(path, sizeof path, "%s/b17.ppm", out);
         u8t_dump(path);
+    }
+    {                                             /* the settings wait for silence to be written (an erase stops the
+                                                   * audio ~40 ms: a crackle under a sound) */
+        uint32_t t, er;
+        int32_t o[2 * CTL];
+        song.master_q12 = 4096;
+        p800_set(P800_PH_RATE, 3);               /* a change ... */
+        trk_note_on(&trk[0], 60, 100);           /* ... and a note held (as from MIDI: no key down) */
+        er = u8t_erases;
+        for (t = 0; t < 6000u; t += 16u) { fm1_ms += 16u; u8_input(); mix_block(o, CTL); }
+        u8t_ok(u8t_erases == er, "a change, a note held for 6 s: nothing written under it");
+        trk_note_off(&trk[0], 60);
+        for (t = 0; t < 500u; t += 16u) { fm1_ms += 16u; u8_input(); mix_block(o, CTL); }
+        u8t_ok(u8t_erases == er, "let go: not while its release still sounds");
+        for (t = 0; t < 8000u; t += 16u) { fm1_ms += 16u; u8_input(); if (u8t_erases == er) for (uint32_t b = 0; b < 16u * 44u / 32u + 1u; b++) mix_block(o, CTL); }
+        u8t_ok(u8t_erases == er + 1u && p8g_saved.ph[1] == 3, "once silent (the tail over, the Poly-800 resting): written");
+    }
+    {                                             /* HOME held: the CPU and the overruns */
+        u8t_max_us = 1451u, u8t_late = 2u, song.cpu_q8 = 100u;
+        host_pressed = 1u << panel.btn[B_HOME];
+        fm1_in.buttons |= 1u << panel.btn[B_HOME];
+        u8_input();
+        u8t_ok(ue.view == UV_CPU && u8t_max_us == 0u, "HOME held: the CPU shown, its peak from now");
+        u8t_max_us = 1451u;
+        u8t_ok(u8_cpu_now() == 40u && u8_cpu_peak() == 50u, "CPU now 40 %, peak 50 % (1451 us of a 2902 us half)");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/cpu.ppm", out);
+        u8t_dump(path);
+        fm1_in.buttons &= ~(1u << panel.btn[B_HOME]);
+        u8_input();
+        u8t_ok(ue.view == UV_NONE, "HOME let go: gone");
     }
     printf(u8t_fails ? "%d FAILED\n" : "all passed\n", u8t_fails);
     return u8t_fails != 0;

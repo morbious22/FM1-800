@@ -25,6 +25,8 @@
  * FM1_HP builds (the owner's own; FM1_HP=0 leaves it out): the high-pass add-on, one setting for every program, on
  * GLO: GLO + SEL switches it on / off, GLO + KNOB 2 its CUTOFF (0..99), GLO + LFO whether the MG sweeps it (with the
  * low-pass, as the page). Shown in the lower half while GLO is held; HPF at the bottom while it is on.
+ * HOME held: the CPU, now and its peak since HOME went down, and the overruns since power-on (audio.c: a half of the
+ * audio not ready in time, heard as a crackle; a crackle with none is something else, such as a flash erase).
  * The lights (u8_leds, in place of Felucca's ui_leds): every button and key glows dim, FX lit with the phaser on, OCT-
  * / OCT+ lit when the keys are moved down / up, a key lit while it is held. Every other control does nothing. */
 
@@ -243,7 +245,7 @@ static const u8_par_t U8_PAR[] = {
 static p800_prog_t u8_ed;                        /* the program playing: its slot's, read from flash (prog800.c), edited
                                                   * here; the
                                                   * Poly-800 plays it while p8.pg points here. A new program: gone */
-enum { UV_NONE, UV_PAR, UV_TUNE, UV_HP };
+enum { UV_NONE, UV_PAR, UV_TUNE, UV_HP, UV_CPU };
 enum { PG_HOME, PG_PHASER, PG_ECHO };
 static struct {
     uint8_t sel, view, prog, page, ph_on, ph_set, ph_mix;
@@ -315,6 +317,16 @@ static void u8_edit(uint32_t k, int32_t s)
     p800_apply();                                /* (the cutoff's base, key tracking) */
 }
 
+#ifndef U8_MAX_US                               /* (audio.c's: the longest half since cleared, the halves late) */
+#define U8_MAX_US felucca_dbg.max_us
+#define U8_LATE felucca_dbg.late
+#endif
+
+/* HOME held: the load now (song.cpu_q8, 256 = all) and a half's time in us, as % to the nearest 5 (the screen is not
+ * redrawn for every flicker of the load) */
+static uint32_t u8_cpu_now(void) { return (song.cpu_q8 * 100u / 256u + 2u) / 5u * 5u; }
+static uint32_t u8_cpu_peak(void) { return (U8_MAX_US * 100u / (HALF_FRAMES * 1000000u / FS) + 2u) / 5u * 5u; }
+
 /* what the screen shows: the top half (the program) and the bottom half (a parameter, the octave, the phaser),
  * each a signature; a half is drawn again only when its signature changes */
 static uint32_t u8_sig_top(void)
@@ -342,6 +354,9 @@ static uint32_t u8_sig_bot(void)
     sig += (uint32_t)p8.set[P800_HP_ON] * 7u + (uint32_t)p8.set[P800_HP_MG] * 70001u;
     if (ue.view == UV_HP)
         sig += (uint32_t)p8.set[P800_HP_CUT] * 311u;
+    if (ue.view == UV_CPU)
+        sig += u8_cpu_now() * 1000003u + u8_cpu_peak() * 3001u +
+               U8_LATE * 7u;
     return sig;
 }
 
@@ -398,6 +413,18 @@ static void u8_draw(void)
                 }
                 u8_text(10, 202, &AF_S, ue.save == U8S_SAVE ? "SAVE: YES   PRESETS: WHERE   OTHER: NO"
                                                             : "SAVE: YES   OTHER: NO", u8_rgb(255, 230, 120));
+            }
+        } else if (ue.view == UV_CPU) {          /* HOME held: the CPU and the overruns */
+            static const char *const L[3] = {"CPU NOW", "PEAK", "OVERRUNS"};
+            uint32_t c;
+            u8_text(10, 152, &AF_S, "HOME: THE CPU", u8_rgb(255, 170, 230));
+            for (c = 0; c < 3u; c++) {
+                int32_t cx = 40 + 80 * (int32_t)c;
+                fmt_int(v, (int32_t)(c == 0u ? u8_cpu_now() : c == 1u ? u8_cpu_peak() : U8_LATE));
+                if (c < 2u) str_cpy(v + str_len(v), "%", sizeof v - str_len(v));
+                u8_text(cx - text_w(&AF_S, L[c]) / 2, 172, &AF_S, L[c], u8_rgb(255, 170, 230));
+                u8_text(cx - text_w(&AF_L, v) / 2, 188, &AF_L, v,
+                        c == 2u && U8_LATE ? u8_rgb(255, 230, 120) : u8_rgb(120, 240, 255));
             }
         } else if (ue.view == UV_HP) {           /* GLO held: the high-pass (FM1_HP) */
             u8_text(10, 152, &AF_S, "HIGH-PASS", u8_rgb(255, 170, 230));
@@ -554,6 +581,10 @@ static void u8_input(void)
         (void)fm1_input_note_edges();
         return;
     }
+    if ((pressed >> panel.btn[B_HOME]) & 1u)     /* HOME held: the CPU (its peak from now) */
+        U8_MAX_US = 0, ue.view = UV_CPU;
+    if (ue.view == UV_CPU && !((fm1_in.buttons >> panel.btn[B_HOME]) & 1u))
+        ue.view = UV_NONE;
     if ((pressed >> panel.btn[B_SAVE]) & 1u) {   /* SAVE: to this slot, or (PRESETS) another; GLO + SAVE: this slot
                                                   * back to its factory program */
         p800_prog_t there;

@@ -201,3 +201,11 @@ its factory program. Holding SAVE while switching on: RESTORE BANK A (all 64 fac
 The global settings (the tuning; the phaser's, the echo's and the high-pass's settings; the program last chosen) save
 themselves 3 s after the last change (one 20-byte object) and come back at power-on; the phaser, the echo and the
 high-pass always start off. `ui800_test.c` runs it all on a flash held in RAM.
+
+**No flash writes under a sound (v0.9.1).** On the FM-1 the sound crackled and the lights dimmed now and then: a
+flash erase stops the audio ~40 ms. Felucca's autosave (project.c) waited for "quiet", but its quiet knew nothing of
+the Poly-800 (a MIDI note is no key down; a release tail or the echo's repeats are no Felucca voice). It is off in
+the FM-1's build (`main.c`; it saved Felucca's song, which this build does not use). The global settings
+(`prog800.c p8g_poll`) are written only in silence: no key or note held, the Poly-800 resting, the echo's tape
+quiet. Only SAVE writes under a sound, when asked. HOME held shows the CPU now, its peak since HOME went down and
+the overruns since power-on (audio.c), to tell a CPU overload (overruns) from anything else.
