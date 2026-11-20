@@ -50,6 +50,21 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #endif
 
 /* the editor protocol, user presets and projects store these indices: append, never reorder */
+#if FM1_800                       /* FM1-800 (step 9): every slot the Poly-800, so nothing reaches Felucca's engines
+                                    * and the compiler leaves them out (their indices still mean a slot) */
+static const engine_t *const ENGINES[NENGINES] = {
+#define P8X &ENG_P800,
+    P8X P8X P8X P8X P8X P8X P8X P8X P8X P8X P8X P8X P8X
+#if FELUCCA_SLICE
+    P8X
+#endif
+#if FELUCCA_ADPCM
+    P8X
+#endif
+    &ENG_P800,
+#undef P8X
+};
+#else
 static const engine_t *const ENGINES[NENGINES] = {
     &ENG_ANALOG,                 /* 0 */
 #if FELUCCA_FM4
@@ -76,6 +91,7 @@ static const engine_t *const ENGINES[NENGINES] = {
 #endif
     &ENG_P800,                   /* ENGI_P800 (FM1-800) */
 };
+#endif
 
 /* a track's engine number as an index (the audio paths: a compare, cheaper than % NENGINES; a bad number: 0) */
 static inline uint32_t eng_idx(uint32_t e) { return e < NENGINES ? e : 0u; }

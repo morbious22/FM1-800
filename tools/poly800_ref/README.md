@@ -247,3 +247,13 @@ bends), CC 1, CC 120 / 123 (every note lets go); nothing else, program change ne
 banks'). Before this only channels 1..4 were heard (Felucca's routing to its parts). The wheel adds the program's MG
 without its DELAY (as the Poly-800's joystick). The MG stays free, its own rate, never the sequencer's tempo.
 `ui800_test.c` checks the page, OMNI and one channel, a held A3 bent an octave at BEND 12, CC 1, CC 123.
+
+## The clear-out, stage 1 (step 9, v0.12.0)
+
+Behaviour unchanged; Felucca's unused parts cut loose so the compiler leaves them out of the FM-1's build (Felucca's
+own build, FM1_800=0, is as it was). `engines.c`: every engine slot points at the Poly-800 (the indices still mean a
+slot), so Felucca's synth engines and their 123 KB of samples go. `project.c persist_boot`: no slicer store, no user
+sample scan, no project fetch (the global settings are still read). `main.c`: no FM6 init, no demo patterns, no
+autosave restore, and no web editor (`editor.c` not built): its SysEx frames (7D 46 4C) are let go, every other frame
+held for the update, whose identity reply and M-UPGRADE are `ota.c`'s, so the installer works as before. Measured
+(clang IR of `felucca.c`): 411 functions / ~56.5k instructions before, 206 / ~27k now.

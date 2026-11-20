@@ -57,7 +57,9 @@ static void felucca_init(void)
         song.g[i] = GP[i].def;
     p800_init();                              /* FM1-800: the Poly-800 (eng_p800.c), before any note */
     undo_depth++;                             /* (no undo copy of the power-on loads) */
+#if !FM1_800
     fm6_init();                               /* every track's FM6 patch: the init voice */
+#endif
     for (i = 0; i < NTRK; i++) {
         track_t *t = &trk[i];
         track_defaults(t);
@@ -66,7 +68,7 @@ static void felucca_init(void)
         t->engine = t->eng_req;
         eng_mem_claim(t);                     /* (zeros already: no note can come before) */
         track_defaults_steps(t);              /* (a sound load never touches them) */
-        if (TRK_DEF[i][2])
+        if (TRK_DEF[i][2] && !FM1_800)        /* (FM1-800: no demo patterns: PLAY plays its own sequence) */
             load_pat16(t, PATTERNS[TRK_DEF[i][2] - 1u].note, PATTERNS[TRK_DEF[i][2] - 1u].flags);
         pat_sig[i] = steps_sig(t);            /* a default pattern, not the user's */
         pat_last[i] = TRK_DEF[i][2];
@@ -98,6 +100,23 @@ static void boot_leds(void)
     if (boot_clean && !(ui_prefs & PREF_ANIM_OFF))
         fm1_led_anim_start(settings_leds == LEDS_DIM || settings_leds == LEDS_DIM_LO);
 }
+
+#if FM1_800
+/* FM1-800 (step 9): no web editor. A SysEx frame to the editor (7D 46 4C) is let go; any other stays held for the
+ * update (OTA: the installer's M-UPGRADE, ota_service): editor.c ed_service's own test, the editor itself gone */
+static int ed_service(void)
+{
+    const uint8_t *p;
+    uint32_t n;
+    if (!ota_frame_get(&p, &n))
+        return 0;
+    if (n >= 4u && p[0] == 0x7Du && p[1] == 0x46u && p[2] == 0x4Cu) {
+        ota_frame_done();
+        return 0;
+    }
+    return 1;
+}
+#endif
 
 static void fm1_main(void)
 {
@@ -160,7 +179,9 @@ static void fm1_main(void)
         panel_setup();                        /* OCT- + OCT+ held at power-on */
         settings_save();
     }
+#if !FM1_800
     autosave_boot(boot_clean);                /* (1.2) the last session's music, under the splash */
+#endif
     for (ms = 0; ms < 400u; ms += 10u) {      /* the splash; the pot followed (MIDI IN plays under it) */
         fm1_delay_ms(10);
         master_poll();

@@ -1199,25 +1199,29 @@ static void persist_boot(void)                    /* before settings_init / pane
         return;
     fl_plain_window_init();                        /* flash above 0x93000 reads as plaintext through XIP
                                                     * (user sample sets are played from there) */
-#if FELUCCA_SLICE
+#if FELUCCA_SLICE && !FM1_800
     slc_store_boot();                              /* (the scans read each slot's stored slices) */
 #endif
+#if !FM1_800                                       /* (FM1-800: no sample engines, no user samples) */
     {
         uint32_t k;
         for (k = 0; k < SMP_USER_SLOTS; k++)
             smp_user_scan(k);
     }
+#endif
     {
         int n = st_load(OBJ_SETTINGS, &p, sizeof p);
         if (settings_import(&p, n))
             persist_saved = p;
     }
+#if !FM1_800                                       /* (FM1-800: no Felucca projects: prog800.c keeps its own) */
     {   /* projects: fill empty RAM slots from flash, so the slot list is right after power-on */
         uint32_t i;
         for (i = 0; i < 4u; i++)
             if (!proj_import(&proj_scratch, &proj_slot[i], sizeof(project_store_t)))
                 proj_fetch(i);
     }
+#endif
     up_boot();                                     /* user presets */
 #endif
 }
