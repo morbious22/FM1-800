@@ -397,6 +397,21 @@ static volatile uint8_t *const mpc_io;
  * channel aftertouch, Program Change, so they stay free for other instruments. */
 static void __attribute__((noinline)) midi_event(uint32_t st, uint32_t ch, uint32_t d1, uint32_t d2)
 {
+#if FM1_800
+    if (p8_midi_ch && ch + 1u != p8_midi_ch)     /* FM1-800 (seq800.c): one channel, or OMNI */
+        return;
+    if (st == 0x90u && d2)
+        p800_note_on((uint8_t)d1);
+    else if (st == 0x80u || st == 0x90u)
+        p800_note_off((uint8_t)d1);
+    else if (st == 0xE0u)
+        p800_set(P800_BEND, (int32_t)(d1 | (d2 << 7)) - 8192);
+    else if (st == 0xB0u && d1 == 1u)
+        p800_set(P800_MODW, (int32_t)d2);
+    else if (st == 0xB0u && (d1 == 120u || d1 == 123u))
+        p800_all_off();
+    return;
+#endif
     if (song.g[G_ROUTE] != 1 && !midi_in_block(ch))
         return;
     if (st == 0x90u || st == 0x80u)

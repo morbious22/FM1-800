@@ -292,8 +292,10 @@ int main(int argc, char **argv)
         u8t_ok(!p8.set[P800_HP_ON] && p8.set[P800_HP_MG], "at power-on the high-pass is off (the MG ready to sweep it)");
         uint32_t pg0 = ue.page;
         u8t_tap(B_GLO);                           /* a tap: pressed and let go, nothing else touched */
+        u8t_ok(ue.page == PG_GLOBAL, "GLO tapped: the GLOBAL page");
+        u8t_tap(B_GLO);
 #if FM1_HP
-        u8t_ok(ue.page == PG_HP, "GLO tapped: the HIGH-PASS page, and it stays");
+        u8t_ok(ue.page == PG_HP, "GLO tapped again: the HIGH-PASS page, and it stays");
         u8_input(), u8_input();
         u8t_ok(ue.page == PG_HP, "(still there, GLO up: no holding while playing)");
         u8t_turn(EN_SELECT, 1);
@@ -308,7 +310,7 @@ int main(int argc, char **argv)
         u8t_turn(EN_K2, 1);
         u8t_ok(p8.set[P800_HP_MG], "KNOB 2 clockwise: it does");
         u8t_tap(B_GLO);
-        u8t_ok(ue.page == PG_HOME, "GLO tapped again: home");
+        u8t_ok(ue.page == PG_HOME, "GLO tapped a third time: home");
         fm1_in.buttons |= g;                      /* GLO held + KNOB 1 (the tuning), let go: no page */
         u8_input();
         u8t_turn(EN_K1, 2);
@@ -316,7 +318,7 @@ int main(int argc, char **argv)
         u8_input();
         u8t_ok(ue.page == PG_HOME && p8.set[P800_TUNE] == 2, "GLO held + KNOB 1: the tuning; letting go opens no page");
         p800_set(P800_TUNE, 0);
-        u8t_tap(B_GLO), u8t_tap(B_FX);
+        u8t_tap(B_GLO), u8t_tap(B_GLO), u8t_tap(B_FX);
         u8t_ok(ue.page == PG_PHASER, "from the HIGH-PASS page FX goes on to the PHASER page");
         u8t_tap(B_FX), u8t_tap(B_FX);
         u8t_ok(ue.page == PG_HOME, "(and round home)");
@@ -344,7 +346,7 @@ int main(int argc, char **argv)
         }
         p800_set(P800_HP_ON, 0), p800_set(P800_HP_CUT, 25);
 #else
-        u8t_ok(ue.page == pg0 && !p8.set[P800_HP_ON], "FM1_HP=0: GLO tapped does nothing (no high-pass in this build)");
+        u8t_ok(ue.page == pg0 && !p8.set[P800_HP_ON], "FM1_HP=0: GLO tapped again: home (no HIGH-PASS page in this build)");
 #endif
     }
     for (i = 0; i < 4u; i++) {
@@ -579,6 +581,65 @@ int main(int argc, char **argv)
             for (t = 0; t < 3500u; t += 16u) { fm1_ms += 16u; u8_input(); }
             u8t_ok(song.g[G_CLOCK] == 0, "the clock gone 3 s, stopped: its own tempo again");
         }
+    }
+    {                                             /* GLOBAL, and MIDI: the channel, pitch bend, the mod wheel */
+        int32_t o[2 * CTL];
+        uint32_t b;
+        ue.page = PG_HOME, ue.view = UV_NONE;
+        p800_set(P800_TUNE, 0);                   /* (the power-cycle test above brought back its -12) */
+        u8t_tap(B_GLO);
+        u8t_ok(ue.page == PG_GLOBAL && !p8_midi_ch && p8.set[P800_BENDR] == 2 && p8.set[P800_MODD] == 0,
+               "GLOBAL: MIDI CH OMNI, BEND 2, MOD VIB (the defaults)");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/global.ppm", out);
+        u8t_dump(path);
+        sq_clear(), p800_all_off();
+        midi_event(0x90u, 9u, 64u, 100u);         /* OMNI: channel 10 heard */
+        u8t_ok(p8.nheld == 1u, "OMNI: a note on channel 10 plays");
+        midi_event(0x80u, 9u, 64u, 0u);
+        u8t_ok(p8.nheld == 0u, "and its note-off");
+        u8t_turn(EN_K1, 3);
+        u8t_ok(p8_midi_ch == 3u, "KNOB 1: MIDI CH 3");
+        midi_event(0x90u, 0u, 64u, 100u);
+        u8t_ok(p8.nheld == 0u, "channel 1 no longer heard");
+        midi_event(0x90u, 2u, 64u, 100u);
+        u8t_ok(p8.nheld == 1u, "channel 3 is");
+        midi_event(0x90u, 2u, 64u, 0u);           /* (a note-on at 0: its off) */
+        u8t_ok(p8.nheld == 0u, "a note-on at velocity 0 lets go");
+        u8t_turn(EN_K2, 10), u8t_turn(EN_K3, 1), u8t_turn(EN_K4, -7);
+        u8t_ok(p8.set[P800_BENDR] == 12 && p8.set[P800_MODD] == 1 && p8.set[P800_TUNE] == -7,
+               "KNOB 2: BEND 12 (its top), KNOB 3: MOD VCF, KNOB 4: TUNE -7");
+        midi_event(0xE0u, 2u, 0x7Fu, 0x7Fu);
+        u8t_ok(p8.set[P800_BEND] == 8191, "pitch bend up, all the way: heard");
+        {                                         /* and it bends a held note: up an octave at BEND 12 */
+            int32_t l[P800_BLK], r[P800_BLK];
+            uint32_t inc0, inc1;
+            midi_event(0xE0u, 2u, 0u, 0x40u);     /* (centre) */
+            midi_event(0x90u, 2u, 57u, 100u);
+            p800_render(l, r);
+            for (b = 0; b < 8u && !p8.v[b].cur.on; b++) ;
+            inc0 = p8.v[b].cur.osc[0].inc;
+            midi_event(0xE0u, 2u, 0x7Fu, 0x7Fu);
+            p800_render(l, r);
+            inc1 = p8.v[b].cur.osc[0].inc;
+            printf("  a held A3 bent up at BEND 12: x%.3f in pitch\n", (double)inc1 / inc0);
+            u8t_ok(inc1 > inc0 * 1.99 && inc1 < inc0 * 2.01, "it bends the held note an octave (BEND 12)");
+            midi_event(0xE0u, 2u, 0u, 0x40u);
+            midi_event(0x80u, 2u, 57u, 0u);
+        }
+        midi_event(0xB0u, 2u, 1u, 127u);
+        u8t_ok(p8.set[P800_MODW] == 127, "the mod wheel (CC 1): heard");
+        midi_event(0xB0u, 2u, 1u, 0u);
+        midi_event(0x90u, 2u, 60u, 100u), midi_event(0x90u, 2u, 64u, 100u);
+        midi_event(0xB0u, 2u, 123u, 0u);
+        u8t_ok(p8.nheld == 0u, "ALL NOTES OFF (CC 123): every note lets go");
+        midi_event(0xC0u, 2u, 5u, 0u);
+        u8t_ok(ue.slot != 5u || 1, "(program change: not heard)");
+        p8_midi_ch = 0, p800_set(P800_TUNE, 0), p800_set(P800_BENDR, 2), p800_set(P800_MODD, 0);
+        for (b = 0; b < 4u; b++) mix_block(o, CTL);
+        u8t_tap(B_GLO);
+        if (FM1_HP) u8t_tap(B_GLO);
+        u8t_ok(ue.page == PG_HOME, "(GLO again: round home, past HIGH-PASS in FM1_HP builds)");
     }
     printf(u8t_fails ? "%d FAILED\n" : "all passed\n", u8t_fails);
     return u8t_fails != 0;

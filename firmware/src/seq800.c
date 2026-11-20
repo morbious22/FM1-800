@@ -12,6 +12,11 @@
  * Stored as bytes: a step is its count (1..8, its notes after), SQ_REST or SQ_TIE. Saved (OBJ_P8SEQ, prog800.c) when
  * an entry ends; the tempo with the global settings. */
 
+/* MIDI in (seq.c midi_event, FM1-800): the channel heard, 0 OMNI (every one) or 1..16. Notes, pitch bend and the mod
+ * wheel (CC 1) go straight to the Poly-800; CC 120 / 123 let every note go; all else is not heard (program change too:
+ * the programs are the A / B banks') */
+static uint8_t p8_midi_ch;
+
 #define SQ_MAXN 256u                             /* notes */
 #define SQ_MAXS 256u                             /* steps */
 #define SQ_BYTES (SQ_MAXN + SQ_MAXS)

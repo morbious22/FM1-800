@@ -62,10 +62,13 @@ typedef struct {
 #include "p800_data.h"
 
 enum { P800_TUNE, P800_VOL, P800_AGE, P800_PH_STAGES, P800_PH_RATE, P800_PH_DEPTH, P800_PH_FB, P800_PH_MIX,
-       P800_HP_ON, P800_HP_CUT, P800_PH_DEEP, P800_HP_MG, P800_NSET };
+       P800_HP_ON, P800_HP_CUT, P800_PH_DEEP, P800_HP_MG, P800_BEND, P800_BENDR, P800_MODW, P800_MODD, P800_NSET };
 /* the page's controls as it opens; P800_PH_DEEP (not the page's): 1 the deep phaser (the FM-1), 0 the page's own (the
  * tests that hold the firmware to the page); P800_HP_MG (FM1-800): 1 the MG sweeps the high-pass too (the page), 0 not */
-static const int16_t P800_SET_DEF[P800_NSET] = {0, 22, 3, 0, 4, 6, 3, 5, 0, 25, 1, 1};
+/* FM1-800's MIDI: P800_BEND the pitch bend now (-8192..8191), P800_BENDR its range (0..12 semitones), P800_MODW the mod
+ * wheel (0..127), P800_MODD where the wheel sends the MG: 0 VIB (the pitch, up to +-50 cents), 1 VCF (the filter, up to
+ * +-1 octave: a wah at slow MG), 2 BOTH. The wheel's MG skips the MG's DELAY (as a joystick); none of it on the page */
+static const int16_t P800_SET_DEF[P800_NSET] = {0, 22, 3, 0, 4, 6, 3, 5, 0, 25, 1, 1, 0, 2, 0, 0};
 
 #define P800_ONE (1 << 30)
 
@@ -556,7 +559,7 @@ static void p800_render(int32_t *outl, int32_t *outr)
     int16_t e3[P800_BLK];
     p800_df1_t c1, c2, chp, cap[6], capr[6];
     uint32_t i, k, nap = (uint32_t)p8.set[P800_PH_STAGES] + 1u;
-    int32_t mg, mod12, fc, fcmg, hc, ph, chd[2], chs[2], nzq, og, wet, pfb, pmix, deep = p8.set[P800_PH_DEEP];
+    int32_t mg, mod12, fc, fcmg, hc, ph, chd[2], chs[2], nzq, og, wet, pfb, pmix, deep = p8.set[P800_PH_DEEP], wv, wvf;
     p800_ready();
     g = p8.pg;
     if (nap > 6u) nap = 6u;
@@ -564,7 +567,8 @@ static void p800_render(int32_t *outl, int32_t *outr)
 
     /* the MG: page lfo -> mf (its delay gain) -> md (DCO, up to 100 cents), mv (VCF, up to 1200 cents) */
     mg = p800_sin(p8.mg_ph);
-    p8.mg_ph += P800_MG_INC[g->mg[0]] * P800_BLK;
+    wv = (mg * p8.set[P800_MODW]) / 127;         /* the wheel's MG: the program's, without its delay */
+    p8.mg_ph += P800_MG_INC[g->mg[0]] * P800_BLK;   /* (free: its own rate, never the tempo) */
     if (p8.mg_fade >= 0) {
         if (p8.mg_wait > 0) p8.mg_wait--;
         else if (p8.mg_fade < P800_MGFADE_BLKS) p8.mg_gain = 32767 * ++p8.mg_fade / P800_MGFADE_BLKS;
@@ -572,6 +576,9 @@ static void p800_render(int32_t *outl, int32_t *outr)
     }
     mg = (mg * p8.mg_gain) >> 15;
     mod12 = (mg * (g->mg[2] * 1200 / 15)) >> 15;   /* page md.gain=mi/15*100 cents, in twelfths */
+    mod12 += (p8.set[P800_MODD] != 1 ? (wv * 600) >> 15 : 0) +   /* the wheel: +-50 cents */
+             p8.set[P800_BEND] * p8.set[P800_BENDR] * 1200 / 8192;   /* the bend: its range at full */
+    wvf = p8.set[P800_MODD] != 0 ? (wv * 1200) >> 15 : 0;          /* .. and the filter: +-1 octave */
 
     for (k = 0; k < 8u; k++) {
         snd_block(&p8.v[k].cur, vb, mod12, (uint32_t)p8.set[P800_AGE]);
@@ -580,9 +587,9 @@ static void p800_render(int32_t *outl, int32_t *outr)
 
     /* DEG 3 -> the cutoff (page eg gain ei/15*7200 cents, polarity) and the noise's level */
     env_block(&p8.e3, e3);
-    fcmg = p8.base_cents + ((mg * (g->mg[3] * 1200 / 15)) >> 15);
+    fcmg = p8.base_cents + ((mg * (g->mg[3] * 1200 / 15)) >> 15) + wvf;
     hc = (p8.set[P800_HP_ON] ? P800_HC_CENTS[p8.set[P800_HP_CUT]] : P800_HP_OFF_CENTS) +
-         (p8.set[P800_HP_MG] ? (mg * (g->mg[3] * 1200 / 15)) >> 15 : 0);   /* (the MG with the low-pass, or still) */
+         (p8.set[P800_HP_MG] ? ((mg * (g->mg[3] * 1200 / 15)) >> 15) + wvf : 0);   /* (the MG with the low-pass, or still) */
     df1_set(&chp, DF_HP, hc, P800_K_HP);
 
     /* the phaser's allpasses. The page's: 350*1.5^k Hz each, detune its LFO x depth/10 x 2400 cents, both sides alike.

@@ -1419,6 +1419,10 @@ static void events_block(uint32_t n)
     pr = panic_req;
     panic_req = 0;
     if (midi_in_overflow) {                            /* a lost note-off must never leave a held note */
+#if FM1_800
+        p800_all_off();                                /* (FM1-800: MIDI's notes go to the Poly-800 itself) */
+        p800_set(P800_BEND, 0);
+#endif
         mi_r = mi_w;
         memset(midi_sel_on, 0, sizeof midi_sel_on);
         memset(midi_ch, 0, sizeof midi_ch);

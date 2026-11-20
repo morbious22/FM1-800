@@ -235,3 +235,15 @@ sequencer has its own tempo again (the SEQUENCE page, KNOB 1: 40..240, saved wit
 Felucca's own patterns (an old autosave's) are cleared, so PLAY plays only the Poly-800's sequence.
 `ui800_test.c` enters a chord, a tie, a rest and a note, checks the timing of every step over two loops, the stop,
 the tempo, the sequence and tempo across a power cycle, the 256-note limit and MIDI clock's start and stop.
+
+## MIDI and the GLOBAL page (v0.11.0)
+
+GLO tapped opens GLOBAL (again: HIGH-PASS in FM1_HP builds, then home): KNOB 1 MIDI CH (OMNI or 1..16), KNOB 2 BEND
+(the pitch bend's range, 0..12 semitones, 2 at first), KNOB 3 MOD (the mod wheel to VIB, the pitch, up to +-50 cents;
+VCF, the filter, up to +-1 octave, a wah at a slow MG; or BOTH), KNOB 4 TUNE. Saved with the global settings (a
+v0.9..v0.10 record, 20 bytes, loads as before with these at their defaults). In the FM-1's build MIDI goes to the
+Poly-800 itself (`midi_control.c midi_event`): notes (on, off, on at 0), pitch bend (per block, so a held note
+bends), CC 1, CC 120 / 123 (every note lets go); nothing else, program change neither (the programs are the A / B
+banks'). Before this only channels 1..4 were heard (Felucca's routing to its parts). The wheel adds the program's MG
+without its DELAY (as the Poly-800's joystick). The MG stays free, its own rate, never the sequencer's tempo.
+`ui800_test.c` checks the page, OMNI and one channel, a held A3 bent an octave at BEND 12, CC 1, CC 123.

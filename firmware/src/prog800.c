@@ -125,8 +125,9 @@ typedef struct {
     uint8_t hp_cut, hp_mg;                       /* the high-pass: CUTOFF, the MG sweeps it */
     uint8_t bpm;                                 /* the sequencer's tempo (its own clock), 40..240 */
     uint8_t rsv[2];
+    uint8_t midi_ch, bendr, modd, rsv2;          /* (v0.11.0) MIDI CH 0 OMNI / 1..16, BEND 0..12, MOD 0..2 */
 } p8g_t;
-_Static_assert(sizeof(p8g_t) == 20u, "the global settings' layout");
+_Static_assert(sizeof(p8g_t) == 24u, "the global settings' layout (v0.9..v0.10 saved its first 20 bytes)");
 static p8g_t p8g_saved;                          /* as in flash (or as at power-on, none there) */
 static uint32_t p8g_due;                         /* fm1_ms to save at (0: nothing to save) */
 
@@ -142,15 +143,24 @@ static void p8g_now(p8g_t *g)
     g->ec[0] = ec.delay, g->ec[1] = ec.repeat, g->ec[2] = ec.balance, g->ec[3] = ec.age;
     g->hp_cut = (uint8_t)p8.set[P800_HP_CUT], g->hp_mg = (uint8_t)p8.set[P800_HP_MG];
     g->bpm = (uint8_t)song.g[G_BPM];
+    g->midi_ch = p8_midi_ch, g->bendr = (uint8_t)p8.set[P800_BENDR], g->modd = (uint8_t)p8.set[P800_MODD];
 }
 
 /* at power-on: the settings as last saved (each held to its range), the program last chosen; none: as they are */
 static uint32_t p8g_boot(void)
 {
     p8g_t g;
+    int n;
     p8g_now(&p8g_saved);
-    if (st_load(OBJ_P8GLOB, &g, sizeof g) != (int)sizeof g || g.magic != P8G_MAGIC)
+    memset(&g, 0, sizeof g);
+    n = st_load(OBJ_P8GLOB, &g, sizeof g);
+    if ((n != (int)sizeof g && n != 20) || g.magic != P8G_MAGIC)
         return 0;
+    if (n == 20)                                 /* (saved by v0.9..v0.10: no MIDI settings yet) */
+        g.midi_ch = 0, g.bendr = 2, g.modd = 0;
+    p8_midi_ch = (uint8_t)(g.midi_ch > 16u ? 0u : g.midi_ch);
+    p800_set(P800_BENDR, g.bendr > 12u ? 2 : g.bendr);
+    p800_set(P800_MODD, g.modd > 2u ? 0 : g.modd);
     p800_set(P800_TUNE, g.tune < -50 ? -50 : g.tune > 50 ? 50 : g.tune);
     p800_set(P800_PH_STAGES, g.ph[0] > 5u ? 5 : g.ph[0]);
     p800_set(P800_PH_RATE, g.ph[1] > 10u ? 10 : g.ph[1]);

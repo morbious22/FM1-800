@@ -31,6 +31,9 @@
  * it (saved); while entering every note or chord played is a step, ARP a TIE, SEQ a REST. Otherwise SEQ opens the
  * SEQUENCE page (and again, home): KNOB 1 its TEMPO (40..240; following MIDI clock it shows EXT). PLAY/STOP starts and
  * stops it (with MIDI clock, the drum machine's start and stop too). REC lit while entering, PLAY while playing.
+ * GLO tapped (pressed and let go, nothing else touched): the GLOBAL page (v0.11.0): KNOB 1 MIDI CH (OMNI, 1..16),
+ * KNOB 2 BEND (0..12 semitones), KNOB 3 MOD (the wheel: VIB, VCF or BOTH), KNOB 4 TUNE (-50..+50). Tapped again:
+ * the HIGH-PASS page (FM1_HP builds), then home.
  * HOME held: the CPU, now and its peak since HOME went down, and the overruns since power-on (audio.c: a half of the
  * audio not ready in time, heard as a crackle; a crackle with none is something else, such as a flash erase).
  * The lights (u8_leds, in place of Felucca's ui_leds): every button and key glows dim, FX lit with the phaser on, OCT-
@@ -252,7 +255,7 @@ static p800_prog_t u8_ed;                        /* the program playing: its slo
                                                   * here; the
                                                   * Poly-800 plays it while p8.pg points here. A new program: gone */
 enum { UV_NONE, UV_PAR, UV_TUNE, UV_HP, UV_CPU };
-enum { PG_HOME, PG_PHASER, PG_ECHO, PG_HP, PG_SEQ };
+enum { PG_HOME, PG_PHASER, PG_ECHO, PG_HP, PG_SEQ, PG_GLOBAL };
 static struct {
     uint8_t sel, view, prog, page, ph_on, ph_set, ph_mix;
     uint8_t slot, edited, loaded;                /* step 8: the slot playing (0..63 bank A, 64..127 bank B), edited
@@ -376,6 +379,9 @@ static uint32_t u8_sig_bot(void)
     sig += (uint32_t)p8.set[P800_HP_ON] * 7u + (uint32_t)p8.set[P800_HP_MG] * 70001u;
     if (ue.page == PG_HP)
         sig += (uint32_t)p8.set[P800_HP_CUT] * 311u + 4999u;
+    if (ue.page == PG_GLOBAL)
+        sig += p8_midi_ch * 101u + (uint32_t)p8.set[P800_BENDR] * 10007u + (uint32_t)p8.set[P800_MODD] * 3001u +
+               (uint32_t)(p8.set[P800_TUNE] + 50) * 7919u;
     sig += (uint32_t)sq.rec * 8191u + (uint32_t)song.playing * 524287u;
     if (ue.page == PG_SEQ)
         sig += sq.nsteps * 37u + sq.nnotes * 1031u + (uint32_t)song.g[G_BPM] * 65537u + (uint32_t)song.g[G_CLOCK] * 999983u +
@@ -454,6 +460,29 @@ static void u8_draw(void)
                 u8_text(cx - text_w(&AF_L, v) / 2, 188, &AF_L, v,
                         c == 2u && U8_LATE ? u8_rgb(255, 230, 120) : u8_rgb(120, 240, 255));
             }
+        } else if (ue.page == PG_GLOBAL) {       /* GLOBAL: KNOB 1..4 in four columns */
+            static const char *const L[4] = {"MIDI CH", "BEND", "MOD", "TUNE"};
+            static const char *const MD[3] = {"VIB", "VCF", "BOTH"};
+            uint32_t c;
+            u8_text(10, 152, &AF_S, "GLOBAL", u8_rgb(255, 170, 230));
+            for (c = 0; c < 4u; c++) {
+                int32_t cx = 30 + 60 * (int32_t)c;
+                if (c == 0u) {
+                    if (p8_midi_ch) fmt_int(v, p8_midi_ch);
+                    else str_cpy(v, "OMNI", sizeof v);
+                } else if (c == 1u) {
+                    fmt_int(v, p8.set[P800_BENDR]);
+                } else if (c == 2u) {
+                    str_cpy(v, MD[p8.set[P800_MODD] % 3], sizeof v);
+                } else {
+                    v[0] = 0;
+                    if (p8.set[P800_TUNE] > 0) str_cpy(v, "+", sizeof v);
+                    fmt_int(v + str_len(v), p8.set[P800_TUNE]);
+                }
+                u8_text(cx - text_w(&AF_S, L[c]) / 2, 172, &AF_S, L[c], u8_rgb(255, 170, 230));
+                u8_text(cx - text_w(&AF_M, v) / 2, 185, &AF_M, v, u8_rgb(255, 255, 255));
+            }
+            u8_text(10, 206, &AF_S, "BEND IN SEMITONES  TUNE IN CENTS", u8_rgb(150, 120, 170));
         } else if (ue.page == PG_SEQ) {          /* the sequence: entering or playing, TEMPO, steps, notes */
             static const char *const L[3] = {"TEMPO", "STEPS", "NOTES"};
             uint32_t c;
@@ -718,12 +747,29 @@ static void u8_input(void)
         ue.view = UV_NONE;                       /* (the program alone; SELECT keeps its place) */
     }
     ue.prog = trk[0].preset;
-#if FM1_HP
-    if (!glo && ue.glo_prev && !ue.glo_used)     /* GLO tapped: the high-pass's page, or back home */
-        ue.page = ue.page == PG_HP ? PG_HOME : PG_HP;
-#endif
+    if (!glo && ue.glo_prev && !ue.glo_used)     /* GLO tapped: GLOBAL, then (FM1_HP) HIGH-PASS, then home */
+        ue.page = ue.page != PG_GLOBAL && ue.page != PG_HP ? PG_GLOBAL
+                : ue.page == PG_GLOBAL && FM1_HP ? PG_HP : PG_HOME;
     ue.glo_prev = (uint8_t)glo;
-    if (ue.page == PG_SEQ) {                     /* the sequence's page: KNOB 1 its TEMPO (its own clock) */
+    if (ue.page == PG_GLOBAL) {                  /* GLOBAL: KNOB 1 MIDI CH, 2 BEND, 3 MOD, 4 TUNE */
+        if ((s = panel_enc(EN_K1)) != 0) {
+            int32_t c = (int32_t)p8_midi_ch + s;
+            p8_midi_ch = (uint8_t)(c < 0 ? 0 : c > 16 ? 16 : c);
+        }
+        if ((s = panel_enc(EN_K2)) != 0) {
+            int32_t c = p8.set[P800_BENDR] + s;
+            p800_set(P800_BENDR, c < 0 ? 0 : c > 12 ? 12 : c);
+        }
+        if ((s = panel_enc(EN_K3)) != 0) {
+            int32_t c = p8.set[P800_MODD] + s;
+            p800_set(P800_MODD, c < 0 ? 0 : c > 2 ? 2 : c);
+        }
+        if ((s = panel_enc(EN_K4)) != 0) {
+            int32_t c = p8.set[P800_TUNE] + s;
+            p800_set(P800_TUNE, c < -50 ? -50 : c > 50 ? 50 : c);
+        }
+        (void)panel_enc(EN_SELECT), (void)panel_enc(EN_ALGO);
+    } else if (ue.page == PG_SEQ) {              /* the sequence's page: KNOB 1 its TEMPO (its own clock) */
         if ((s = panel_enc(EN_K1)) != 0 && !song.g[G_CLOCK]) {
             int32_t b = song.g[G_BPM] + s;
             song.g[G_BPM] = (int16_t)(b < 40 ? 40 : b > 240 ? 240 : b);
