@@ -641,6 +641,18 @@ int main(int argc, char **argv)
         if (FM1_HP) u8t_tap(B_GLO);
         u8t_ok(ue.page == PG_HOME, "(GLO again: round home, past HIGH-PASS in FM1_HP builds)");
     }
+    {                                             /* the screen cleared under it (main.c, an update cancelled): u8.ok
+                                                   * = 0 draws all of it again, the top too, not only its stars */
+        uint32_t rows;
+        u8_input();
+        u8_draw();
+        memset(host_screen, 0, sizeof host_screen);
+        rows = host_blit_rows;
+        u8.ok = 0;
+        u8_draw();
+        u8t_ok(host_blit_rows == rows + 240u && host_screen[(U8_CY - 40) * 240 + U8_CX] != 0,
+               "after a clear, u8.ok = 0: both halves drawn again (the sun back)");
+    }
     printf(u8t_fails ? "%d FAILED\n" : "all passed\n", u8t_fails);
     return u8t_fails != 0;
 }

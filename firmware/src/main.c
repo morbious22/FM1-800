@@ -166,7 +166,13 @@ static void fm1_main(void)
         master_poll();
     }
     kb_boot_hold = 0;
+#if FM1_800
+    u8.ok = 0;                                 /* FM1-800: its home screen is up already (no blank: it would leave
+                                                * ui800.c thinking the top still drawn, only its stars twinkling
+                                                * on black, v0.11.1); the first frame draws all of it again */
+#else
     lcd_fill(0, 0, 240, 240, T_BG);
+#endif
     scrn.idle = fm1_ms;                        /* (MENU > SCREEN OFF: from here) */
 
     for (;;) {
@@ -241,6 +247,9 @@ static void fm1_main(void)
                 ota_session();                          /* returns only if nothing was committed */
             lcd_fill(0, 0, 240, 240, T_BG);
             ui.force = 1;
+#if FM1_800
+            u8.ok = 0;                                  /* (FM1-800: the home screen, all of it again) */
+#endif
         }
 #endif
         if (usb.uboot_req) {                            /* SysEx F0 22 24 35 7D F7 from the host */
