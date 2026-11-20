@@ -1,4 +1,18 @@
-# Building Felucca for the M-VAVE FM-1
+# Building FM1-800 for the M-VAVE FM-1
+
+FM1-800 builds with Felucca's build (below, Felucca's own notes); `tools/build.py` builds the FM1-800 firmware
+(`FM1_800=1`). `FM1_HP=0 ./build.sh` leaves out the high-pass add-on (the public release). Clone this repository,
+not Felucca's, with `--recurse-submodules`:
+
+```
+git clone --recurse-submodules https://github.com/morbious22/FM1-800.git
+```
+
+The installer site: `python3 web/make_site.py build/felucca.fwsc VERSION SITE_FOLDER`. Don't use `--release`:
+it marks the package as Felucca's (FM-1_9xx), not FM1-800's (FM-1_800).
+
+## Felucca's notes
+
 
 This repository builds firmware for the FM-1 only. Host-side tests are development tools, not supported application platforms.
 
@@ -10,7 +24,7 @@ The build makes three files in `build/`:
 | `loader/ota.bin` | the update loader |
 | `felucca.fwsc` | the installable package (app + loader) |
 
-## Get the source
+### Get the source
 
 Two parts are git submodules: six engines (`firmware/engines/`, [Felucca-Engines](https://github.com/hugelton/Felucca-Engines),
 MIT) and the hardware layer (`firmware/bsp/`, [felucca-bsp](https://github.com/hugelton/felucca-bsp), MPL-2.0), so clone
@@ -25,7 +39,7 @@ it adds to a release leave `firmware/engines/` and `firmware/bsp/` empty; each r
 `felucca-X.Y.Z-source.tar.gz`, the whole source with the submodules' files in it. The build stops with
 "firmware/engines is empty" or "firmware/bsp is empty" when they are missing.
 
-## Prerequisites (macOS)
+### Prerequisites (macOS)
 
 - Python 3 with Pillow and fontTools: `pip3 install Pillow fonttools` (the UI font and icons are
   rasterised at build time)
@@ -51,7 +65,7 @@ it adds to a release leave `firmware/engines/` and `firmware/bsp/` empty; each r
 
 On Linux x86-64 the toolchain runs natively and Docker is not needed.
 
-## Build
+### Build
 
 ```
 ./build.sh
@@ -87,7 +101,7 @@ Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`, `c
 `FELUCCA_USB_LAYOUT` (`0` to `3`, default `0`) picks other USB descriptor layouts for testing; see
 `firmware/bsp/chip/usb.c`.
 
-## Samples
+### Samples
 
 The CC0 instrument samples that the SAMPLE engine uses are in `assets/samples-cc0/`
 (Versilian Studios, see `ATTRIBUTION.txt` there). `tools/fetch_cc0.py` downloads them
@@ -95,7 +109,7 @@ again from the source repositories. Without that folder the build still works, w
 instrument sets in the SAMPLE engine and no PIANO in SLICE (the PIANO set's middle C): they play a plain sine
 at the note's pitch instead, and the screen says NO SAMPLE.
 
-## Browser demo
+### Browser demo
 
 ```
 ./build.sh
@@ -109,7 +123,7 @@ It is a demo: the page keeps the flash's storage sectors (projects, user presets
 MIDI out, the editor, updates), TRS MIDI and the user sample slots are not emulated. A build of it is on the site:
 <https://hugelton.github.io/Felucca/webapp/try/>.
 
-## Tests
+### Tests
 
 ```
 tests/run_tests.sh
@@ -135,7 +149,7 @@ cost (`tests/cpu_baseline.txt`, `tests/target_budget.txt`). After an intended ch
 the sound, `GOLDEN_UPDATE=1 sh tests/run_tests.sh` rewrites the hashes; `BUDGET_UPDATE=1`
 does the same for the cost files.
 
-## Install
+### Install
 
 Use the web installer in Chrome or Edge:
 <https://hugelton.github.io/Felucca/webapp/installer/>. It installs the released package.

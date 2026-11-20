@@ -49,7 +49,7 @@
 #define FM1_CRASH_CTX_N 1u         /* chip/fm1_irq.h: the registers of the last crash only (80 B of .noinit; four would
                                     * not fit beside the project slots) */
 #ifndef FELUCCA_VERSION
-#define FELUCCA_VERSION "v0.12.3" /* FM1-800's own version (based on Felucca 1.8.2); shown in the menu, the console
+#define FELUCCA_VERSION "v0.12.4" /* FM1-800's own version (based on Felucca 1.8.2); shown in the menu, the console
                                   * and the editor; build.py --release X.Y */
 #endif
 #if FELUCCA_OTA && !FELUCCA_FLASH

@@ -1,38 +1,66 @@
-# Felucca
+# FM1-800
 
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
 
-Felucca is open-source custom synthesizer firmware for the **M-VAVE FM-1**.
+FM1-800 is a fan-made firmware that turns the **M-VAVE FM-1** into a **Korg Poly-800**: its 64 factory programs, its
+voices, filter and envelopes, its chorus, and its 256-note step sequencer. It adds a phaser, a tape echo, 64 more
+program slots, and MIDI clock from a drum machine or a computer.
 
-The FM-1 is the only supported hardware target. This project does not provide, maintain, or accept requests for ports to other devices or software platforms.
+It is a tribute by a Poly-800 owner. It is not made, endorsed or supported by Korg or by M-VAVE.
 
 ## Install
 
-**Stable release: 1.8.2.** Connect your FM-1 by USB and use the [web installer](https://hugelton.github.io/Felucca/) in Chrome or Edge. The installer offers a way back to the official V15 or V16 firmware. Back up your projects and presets before changing firmware.
+Connect the FM-1 directly to the computer by USB and open the FM1-800 web installer in Chrome or Edge, then press
+**Install**. Do not unplug the cable while it writes. The installer also has a way back to the official FM-1
+firmware (V15 or V16, from M-VAVE): the programs and sequence saved in FM1-800 may be lost when you go back.
 
-**Newer FM-1 flash.** Some newer FM-1 units use UC25HQ80 flash (JEDEC ID `0xB36014`). 1.8.2 recognises it. On such a unit, 1.8.1 and earlier cannot start an update; see the [1.8.2 release notes](https://github.com/hugelton/Felucca/releases/tag/v1.8.2) for the way back through the official V15.
+## Playing it
 
-## Project resources
+| Control | What it does |
+| --- | --- |
+| PRESETS | the program: A11..A88 (the factory 64), then B11..B88 (64 INIT programs to make your own) |
+| GLO + PRESETS | the same number in the other bank |
+| OCT- / OCT+ | the keys an octave down / up (both together: back to 0) |
+| SELECT, KNOB 1 | edit as on the Poly-800: SELECT steps through the parameters, KNOB 1 sets the value |
+| SAVE | save the program: SAVE again to save here, or turn PRESETS to choose another slot first; any other button cancels |
+| GLO + SAVE | put this slot back to its factory program |
+| SAVE held while switching on | put all of bank A back to the factory programs |
+| FX | the PHASER page, then the ECHO page, then home. On each, SELECT turns it on / off and KNOB 1..4 set it |
+| GLO (tap) | the GLOBAL page: MIDI channel, pitch bend range, mod wheel (VIB, VCF or BOTH), tuning |
+| REC | start a new sequence: each note or chord played is a step, ARP a tie, SEQ a rest; REC again to finish (saved) |
+| SEQ | the SEQUENCE page: KNOB 1 TEMPO, KNOB 2 CLOCK (INT, or EXT to follow MIDI clock) |
+| PLAY/STOP | play the sequence. On EXT it waits for the drum machine's or computer's START |
+| HOME held | the CPU load |
 
-- [Web installer](https://hugelton.github.io/Felucca/)
-- [Web editor](https://hugelton.github.io/Felucca/webapp/editor/) ([source](https://github.com/hugelton/Felucca-WebApp))
-- [Try it in your browser](https://hugelton.github.io/Felucca/webapp/try/): a demo of the firmware, no FM-1 needed
-- [Manual and release notes](https://github.com/hugelton/Felucca/wiki/Home)
-- [Building from source](BUILDING.md)
-- [Issue tracker](https://github.com/hugelton/Felucca/issues)
+The phaser and the echo are off at power-on, as on the Poly-800 itself. The battery is shown at the top right.
 
-The firmware uses [Felucca-Engines](https://github.com/hugelton/Felucca-Engines) (MIT) for its built-in sound engines and [felucca-bsp](https://github.com/hugelton/felucca-bsp) (MPL-2.0) for the FM-1 hardware layer. Neither repository implies support for Felucca on other hardware.
+## Building
 
-## Development and support
+See [BUILDING.md](BUILDING.md) for the toolchain. In short, on Linux (or WSL):
 
-Felucca focuses on the FM-1. Third-party modifications and ports are independent projects and are not tested or supported here. Contributions are considered at the maintainer's discretion; no development schedule or ongoing support is promised.
+```
+./build.sh
+python3 web/make_site.py build/felucca.fwsc VERSION SITE_FOLDER
+```
 
-Felucca is developed with the assistance of AI coding agents (code, tests, documentation, translation, maintenance). Design, features, sounds and direction are the maintainer's or the community's; no generative AI is used for music, icons or artwork. See [On AI-Assisted Development and Responsibility](https://github.com/hugelton/Felucca/discussions/166).
+The first makes `build/felucca.fwsc`, the package; the second makes the installer site around it.
+
+How the sound was matched to the Poly-800, version by version, and the tests that check it are in
+[tools/poly800_ref/README.md](tools/poly800_ref/README.md). `tests/poly800/run.sh` runs the FM1-800 tests on the computer.
+
+## Built on Felucca
+
+FM1-800 is built on [Felucca](https://github.com/hugelton/Felucca), the open-source FM-1 firmware by Leo Kuroshita
+([@kurogedelic](https://github.com/kurogedelic), [Hügelton Instruments](https://hugelton.com)), and its hardware layer
+[felucca-bsp](https://github.com/hugelton/felucca-bsp) (MPL-2.0). Felucca's own code is still in this repository:
+the FM1-800 build uses its hardware, display, MIDI, sequencer timing and update code, and leaves the rest out.
+Please send FM1-800 questions and problems here, not to Felucca.
 
 ## Credits and licence
 
-Felucca is free software under [GPL-3.0-only](LICENSE); the Hügelton Sample Pack is CC0 1.0. The engines and hardware layer retain their own licences. See [CREDITS.md](CREDITS.md) and [LICENSING.md](LICENSING.md).
+FM1-800 is free software under [GPL-3.0-only](LICENSE), as Felucca is. The parts it uses keep their own licences:
+see [CREDITS.md](CREDITS.md) and [LICENSING.md](LICENSING.md).
 
-M-VAVE and FM-1 are trademarks of their respective owners. Felucca is not affiliated with, endorsed by or supported by M-VAVE.
+Korg and Poly-800 are trademarks of Korg Inc. M-VAVE and FM-1 are trademarks of their respective owners.
 
-Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+FM1-800 Copyright (C) 2026 morbious22. Felucca Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments.

@@ -1,5 +1,10 @@
 # Credits
 
+**FM1-800** is morbious22's: the Poly-800 for the M-VAVE FM-1, built on Felucca (below). Its sound was matched to a
+Poly-800 model built from Korg's circuit diagrams. Korg and Poly-800 are Korg Inc.'s trademarks; FM1-800 is a fan-made
+tribute, not affiliated with Korg. Felucca's credits follow; not every part they list is in the FM1-800 build (its
+engines, samples and editor are left out).
+
 Felucca is Leo Kuroshita's ([@kurogedelic](https://github.com/kurogedelic), [Hügelton Instruments](https://hugelton.com)). It uses and
 thanks the work below; each keeps its own licence (see [LICENSE](LICENSE), [LICENSING.md](LICENSING.md) and [LICENSES/](LICENSES/)).
 

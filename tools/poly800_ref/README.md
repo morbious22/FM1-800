@@ -282,3 +282,12 @@ go: 206 functions / ~27k IR instructions before, 194 / ~25.4k now. Felucca's own
 out by stage 1 (nothing reached them once `ui800.c` drew the screen and the editor went). What stays from Felucca is
 what the FM-1-800 uses: the drawing library (the sunset, the text), the panel set-up (a unit's buttons and knobs,
 learned once), the crash screen, the sequencer's transport and MIDI clock, the USB serial console, the update code.
+
+## The clear-out, stage 3: what people see (v0.12.4)
+
+The firmware is v0.12.3's (only its version changes). The installer page (`web/index_pkg.html`) is FM1-800's: its
+name, what it is, its credits and source link, no editor link; the way back to the official firmware no longer asks
+for Felucca's editor backup first (the editor left in v0.12.0, so the backup could not be made and the way back
+stopped there): it warns that FM1-800's programs and sequence may be lost, then installs. `web/make_site.py` no longer
+puts the editor on the site (it removes an old site's `webapp/editor/`) and names the package `fm1-800-VER.fwsc`.
+README.md, CREDITS.md, BUILDING.md and the issue templates are FM1-800's. Felucca's code stays in the tree.

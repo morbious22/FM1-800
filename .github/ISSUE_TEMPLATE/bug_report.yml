@@ -1,17 +1,17 @@
 name: Bug report
-description: Something in Felucca doesn't work as it should (one bug per issue)
+description: Something in FM1-800 doesn't work as it should (one bug per issue)
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Issues are for reproducible bugs only. Feature ideas go to [Discussions › Ideas](https://github.com/hugelton/Felucca/discussions/categories/ideas), questions to [Q&A](https://github.com/hugelton/Felucca/discussions/categories/q-a).
+        One bug per issue, with the steps that make it happen.
   - type: input
     id: version
     attributes:
-      label: Felucca version
-      description: Hold HOME > ABOUT on the FM-1
-      placeholder: "v1.0.2"
+      label: FM1-800 version
+      description: Shown at the bottom of the screen for a few seconds after switching on
+      placeholder: "v0.12.4"
     validations:
       required: true
   - type: input
