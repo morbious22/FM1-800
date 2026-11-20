@@ -649,6 +649,17 @@ int main(int argc, char **argv)
         u8t_dump(path);
         usb.config = 0, song.batt_raw = 600;
         u8_draw();
+        {                                         /* the hub's picture (fmhub.png): A11, nothing being edited, full */
+            uint32_t keep = ue.slot;
+            u8_load(0);
+            ue.slot = 0, ue.view = UV_NONE, ue.page = PG_HOME, ue.msg = 0, ue.ph_on = 0;
+            song.octave = 0;
+            fm1_ms += 10000u;
+            u8_draw();
+            snprintf(path, sizeof path, "%s/hub.ppm", out);
+            u8t_dump(path);
+            u8_load(keep), ue.slot = (uint8_t)keep;
+        }
     }
     {                                             /* GLOBAL, and MIDI: the channel, pitch bend, the mod wheel */
         int32_t o[2 * CTL];

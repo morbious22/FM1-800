@@ -1,0 +1,10 @@
+{
+  "what": "A fan-made Korg Poly-800: its 64 factory programs plus 64 slots of your own, edited the Poly-800 way, its chorus and 256-note step sequencer, with a phaser, a tape echo, a high-pass, MIDI clock in or its own tempo, and a sunset home screen. Built on Felucca.",
+  "author": "morbious22",
+  "kinds": [
+    "synth"
+  ],
+  "image": "fmhub.png",
+  "color": "#FF5FA8",
+  "sounds": "CC0: Versilian Studios VSCO-2 CE samples in Felucca's assets (not used by FM1-800)"
+}
