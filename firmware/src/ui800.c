@@ -224,6 +224,22 @@ static void u8_text(int32_t x, int32_t y, const aafont_t *f, const char *s, uint
     cv_over = 0;
 }
 
+/* the battery, top right (v0.12.2; ui_draw.c's reading and Felucca's icon): empty, 1/4, 3/4, full, or a bolt on USB
+ * power; the last bar and empty in red */
+static void u8_battery(void)
+{
+    static const int8_t D[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    int32_t lvl = batt_shown();
+    uint32_t k;
+    cv_over = 1;
+    cv_over_fg = u8_rgb(20, 0, 30);              /* (a dark edge, as the text has, over the stars) */
+    for (k = 0; k < 4u; k++)
+        cv_icon_mid(212 + D[k][0], 17 + D[k][1], 24, batt_icon(lvl), cv_over_fg, cv_over_fg);
+    cv_over_fg = lvl == 4 ? u8_rgb(120, 255, 160) : lvl <= 1 ? u8_rgb(255, 90, 90) : u8_rgb(120, 240, 255);
+    cv_icon_mid(212, 17, 24, batt_icon(lvl), cv_over_fg, cv_over_fg);
+    cv_over = 0;
+}
+
 /* ------------------------------------------------------------------ editing (step 7b) --- */
 /* the program's parameters in the order SELECT steps through them: the page's sections, DCO 1 to the voices */
 enum { PK_NUM, PK_ONOFF, PK_WAVE, PK_OCT, PK_KT, PK_POL, PK_TRIG, PK_VOICES };
@@ -357,7 +373,7 @@ static uint32_t u8_cpu_peak(void) { return (U8_MAX_US * 100u / (HALF_FRAMES * 10
  * each a signature; a half is drawn again only when its signature changes */
 static uint32_t u8_sig_top(void)
 {
-    return 1u + ue.slot + (uint32_t)u8_ed.mode * 131u + (uint32_t)u8_edited() * 211u + str_len(u8_ed.name) * 7001u +
+    return 1u + (uint32_t)batt_shown() * 900001u + ue.slot + (uint32_t)u8_ed.mode * 131u + (uint32_t)u8_edited() * 211u + str_len(u8_ed.name) * 7001u +
            (uint32_t)(uint8_t)u8_ed.name[0] * 60013u;
 }
 static uint32_t u8_sig_bot(void)
@@ -414,7 +430,7 @@ static void u8_draw(void)
     if (song.octave > 0) str_cpy(o + 4, "+", sizeof o - 4);
     fmt_int(o + str_len(o), song.octave);
     nx = 10 + text_w(&AF_L, num) + 12;
-    nf = text_w(&AF_M, g->name) <= 232 - nx ? &AF_M : &AF_S;   /* (a long name in the small face) */
+    nf = text_w(&AF_M, g->name) <= 208 - nx ? &AF_M : &AF_S;   /* (a long name in the small face; the battery after) */
     for (y0 = 0; y0 < 240u; y0 += 120u) {
         if (u8.ok && (y0 ? sb == bot : st == top))
             continue;                            /* (this half has not changed) */
@@ -424,6 +440,7 @@ static void u8_draw(void)
         u8_scene();
         u8_text(10, 6, &AF_L, num, u8_rgb(120, 240, 255));
         u8_text(nx, 9, nf, g->name, u8_rgb(255, 255, 255));
+        u8_battery();
         u8_text(nx, 29, &AF_S, g->mode ? "DOUBLE" : "WHOLE", u8_rgb(255, 170, 230));
         if (u8_edited())                         /* (not what is stored: SAVE keeps it) */
             u8_text(nx + text_w(&AF_S, g->mode ? "DOUBLE" : "WHOLE") + 10, 29, &AF_S, "EDITED", u8_rgb(255, 230, 120));

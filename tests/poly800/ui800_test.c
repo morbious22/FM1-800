@@ -628,6 +628,28 @@ int main(int argc, char **argv)
             u8t_tap(B_SEQ);
         }
     }
+    {                                             /* the battery, top right: its level, USB power, its own redraw */
+        static const int32_t RAW[3] = {600, 540, 500};
+        static const char *const NM[3] = {"batt_full", "batt_low", "batt_empty"};
+        uint32_t k, top0;
+        ue.page = PG_HOME, ue.view = UV_NONE, ue.msg = 0;
+        usb.config = 0;
+        for (k = 0; k < 3u; k++) {
+            song.batt_raw = RAW[k];
+            u8_draw();
+            snprintf(path, sizeof path, "%s/%s.ppm", out, NM[k]);
+            u8t_dump(path);
+        }
+        u8t_ok(batt_shown() == 0, "the battery read low: shown empty");
+        top0 = u8_sig_top();
+        usb.config = 1, usb.suspended = 0;
+        u8t_ok(batt_shown() == 4 && u8_sig_top() != top0, "on USB power: the bolt, and the top half drawn again");
+        u8_draw();
+        snprintf(path, sizeof path, "%s/batt_usb.ppm", out);
+        u8t_dump(path);
+        usb.config = 0, song.batt_raw = 600;
+        u8_draw();
+    }
     {                                             /* GLOBAL, and MIDI: the channel, pitch bend, the mod wheel */
         int32_t o[2 * CTL];
         uint32_t b;

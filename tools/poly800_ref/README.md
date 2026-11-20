@@ -265,3 +265,10 @@ PLAY/STOP starts and stops it, MIDI clock not heard. EXT: MIDI clock (USB or TRS
 it (WAITING), the drum machine's (or computer's) START sets it going from the first step, its STOP stops it and it
 waits for the next START; PLAY/STOP on the FM-1 stops it and un-readies it (the drums then play alone). Before this it
 followed any clock coming in, with no setting. `ui800_test.c` checks both.
+
+## The battery (v0.12.2)
+
+Top right of the home screen, in the sky: Felucca's battery icon and reading (`ui_draw.c batt_shown`, ADC ch3 at the
+stock thresholds): empty, 1/4, 3/4 or full (cyan), the last bar and empty red, a green bolt on USB power. It is part
+of the top half's signature, so a change redraws that half. A program name long enough to reach it drops to the small
+face. `ui800_test.c` dumps the four states (`batt_*.ppm`).
