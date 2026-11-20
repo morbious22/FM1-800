@@ -257,3 +257,11 @@ sample scan, no project fetch (the global settings are still read). `main.c`: no
 autosave restore, and no web editor (`editor.c` not built): its SysEx frames (7D 46 4C) are let go, every other frame
 held for the update, whose identity reply and M-UPGRADE are `ota.c`'s, so the installer works as before. Measured
 (clang IR of `felucca.c`): 411 functions / ~56.5k instructions before, 206 / ~27k now.
+
+## CLOCK INT / EXT (v0.12.1)
+
+The SEQUENCE page's KNOB 2, as the Poly-800 (saved with the global settings, INT at first). INT: its own TEMPO,
+PLAY/STOP starts and stops it, MIDI clock not heard. EXT: MIDI clock (USB or TRS, whichever comes); PLAY only readies
+it (WAITING), the drum machine's (or computer's) START sets it going from the first step, its STOP stops it and it
+waits for the next START; PLAY/STOP on the FM-1 stops it and un-readies it (the drums then play alone). Before this it
+followed any clock coming in, with no setting. `ui800_test.c` checks both.

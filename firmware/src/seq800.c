@@ -17,6 +17,11 @@
  * the programs are the A / B banks') */
 static uint8_t p8_midi_ch;
 
+/* CLOCK (the SEQ page's KNOB 2, saved with the global settings), as the Poly-800: INT, its own TEMPO, PLAY starts it,
+ * MIDI clock not heard; EXT, MIDI clock (USB or TRS, whichever comes): PLAY only readies it (sq_armed), the drum
+ * machine's START (or CONTINUE) sets it going, its STOP stops it (still ready for the next START) */
+static uint8_t sq_ext, sq_armed;
+
 #define SQ_MAXN 256u                             /* notes */
 #define SQ_MAXS 256u                             /* steps */
 #define SQ_BYTES (SQ_MAXN + SQ_MAXS)

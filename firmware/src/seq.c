@@ -1469,8 +1469,8 @@ static void events_block(uint32_t n)
         mi_r++;
         if (status >= 0xF8u) {
 #if FM1_800
-            if (status == 0xF8u || status == 0xFAu || status == 0xFBu) {   /* FM1-800: clock coming in, from USB or
-                                                                            * TRS: followed, no setting (seq800.c) */
+            if (sq_ext && (status == 0xF8u || status == 0xFAu || status == 0xFBu)) {   /* FM1-800, CLOCK EXT: the
+                                                                            * clock coming in, from USB or TRS (seq800.c) */
                 sq.ext_ms = fm1_ms;
                 if (clock_mode != source) {
                     seq_stop();
@@ -1481,6 +1481,11 @@ static void events_block(uint32_t n)
                     midi_beat_samples = 0;
                 }
             }
+#endif
+#if FM1_800
+            if (clock_mode == source && (status == 0xFAu || status == 0xFBu) && !sq_armed)
+                ;                                   /* (EXT, not readied with PLAY: the drum machine plays alone) */
+            else
 #endif
             if (clock_mode == source) {
                 if (status == 0xF8u)

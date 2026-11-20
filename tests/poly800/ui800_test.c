@@ -567,19 +567,65 @@ int main(int argc, char **argv)
         for (k = 0; k < 300u; k++) { trk_note_on(&trk[0], (uint8_t)(40u + k % 40u), 100); u8_input(); trk_note_off(&trk[0], (uint8_t)(40u + k % 40u)); u8_input(); }
         u8t_ok(sq.nnotes == 256u && sq.nsteps == 256u, "256 notes, then no more (the Poly-800's limit)");
         u8t_tap(B_REC);
-        {                                         /* MIDI clock from a drum machine: followed, its start and stop */
+        {                                         /* CLOCK (KNOB 2): INT ignores MIDI clock; EXT waits for the drum machine */
             uint32_t t;
+            ue.page = PG_SEQ;                     /* (REC opened it) */
+            u8t_ok(ue.page == PG_SEQ && !sq_ext, "the SEQUENCE page; CLOCK INT at first");
             (void)midi_enqueue(0x0000F80Fu, 1u);
-            for (b = 0; b < 2u; b++) mix_block(o, CTL);
-            u8t_ok(song.g[G_CLOCK] == 1, "MIDI clock on USB: followed (no setting)");
             (void)midi_enqueue(0x0000FA0Fu, 1u);
             for (b = 0; b < 2u; b++) mix_block(o, CTL);
-            u8t_ok(song.playing, "its START: playing");
+            u8_input();
+            u8t_ok(!song.g[G_CLOCK] && !song.playing, "INT: the drum machine's clock and START not heard");
+            u8t_turn(EN_K2, 1);
+            u8t_ok(sq_ext && !sq_armed, "KNOB 2 clockwise: CLOCK EXT");
+            (void)midi_enqueue(0x0000F80Fu, 1u);
+            (void)midi_enqueue(0x0000FA0Fu, 1u);
+            for (b = 0; b < 2u; b++) mix_block(o, CTL);
+            u8t_ok(song.g[G_CLOCK] == 1 && !song.playing, "EXT, PLAY not pressed: its START plays the drums only");
             (void)midi_enqueue(0x0000FC0Fu, 1u);
             for (b = 0; b < 2u; b++) mix_block(o, CTL);
-            u8t_ok(!song.playing, "its STOP: stopped");
-            for (t = 0; t < 3500u; t += 16u) { fm1_ms += 16u; u8_input(); }
-            u8t_ok(song.g[G_CLOCK] == 0, "the clock gone 3 s, stopped: its own tempo again");
+            u8t_tap(B_PLAY);
+            for (b = 0; b < 4u; b++) mix_block(o, CTL);
+            u8t_ok(sq_armed && !song.playing && ue.msg && !strcmp(ue.msg, "WAITING FOR CLOCK"),
+                   "EXT, PLAY: ready, not playing (WAITING FOR CLOCK)");
+            ue.msg = 0;
+            u8_draw();
+            snprintf(path, sizeof path, "%s/seq_ext.ppm", out);
+            u8t_dump(path);
+            for (t = 0; t < 4000u; t += 16u) { fm1_ms += 16u; u8_input(); }
+            u8t_ok(sq_armed && !song.playing && song.g[G_CLOCK] == 1, "4 s with no clock: still waiting, still EXT");
+            (void)midi_enqueue(0x0000FA0Fu, 1u);
+            for (b = 0; b < 2u; b++) mix_block(o, CTL);
+            u8t_ok(song.playing, "the drum machine's START: playing");
+            (void)midi_enqueue(0x0000FC0Fu, 1u);
+            for (b = 0; b < 2u; b++) mix_block(o, CTL);
+            u8t_ok(!song.playing && sq_armed, "its STOP: stopped, ready for the next START");
+            (void)midi_enqueue(0x0000FA0Fu, 1u);
+            for (b = 0; b < 2u; b++) mix_block(o, CTL);
+            u8t_ok(song.playing, "its START again: playing again");
+            u8t_tap(B_PLAY);
+            for (b = 0; b < 4u; b++) mix_block(o, CTL);
+            u8t_ok(!song.playing && !sq_armed, "PLAY/STOP on the FM-1: stopped, no longer ready");
+            (void)midi_enqueue(0x0000FA0Fu, 1u);
+            for (b = 0; b < 2u; b++) mix_block(o, CTL);
+            u8t_ok(!song.playing, "so the next START plays the drums only");
+            {                                     /* saved: power-on, still EXT */
+                for (t = 0; t < 8000u; t += 16u) { fm1_ms += 16u; u8_input(); for (b = 0; b < 22u; b++) mix_block(o, CTL); }
+                sq_ext = 0;
+                memset(&ue, 0, sizeof ue);
+                u8_input();
+                u8t_ok(sq_ext == 1u, "power-on: CLOCK EXT kept");
+            }
+            ue.page = PG_SEQ;
+            u8t_turn(EN_K2, -1);
+            u8_input();
+            u8t_ok(!sq_ext && !song.g[G_CLOCK], "KNOB 2 anticlockwise: INT, its own tempo");
+            u8t_tap(B_PLAY);
+            for (b = 0; b < 4u; b++) mix_block(o, CTL);
+            u8t_ok(song.playing, "INT, PLAY: playing straight away");
+            u8t_tap(B_PLAY);
+            for (b = 0; b < 4u; b++) mix_block(o, CTL);
+            u8t_tap(B_SEQ);
         }
     }
     {                                             /* GLOBAL, and MIDI: the channel, pitch bend, the mod wheel */

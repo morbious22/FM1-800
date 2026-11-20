@@ -124,7 +124,7 @@ typedef struct {
     uint8_t ec[4];                               /* the echo: DELAY, REPEAT, BALANCE, AGE */
     uint8_t hp_cut, hp_mg;                       /* the high-pass: CUTOFF, the MG sweeps it */
     uint8_t bpm;                                 /* the sequencer's tempo (its own clock), 40..240 */
-    uint8_t rsv[2];
+    uint8_t clk_ext, rsv;                        /* (v0.12.1) CLOCK: 0 INT, 1 EXT (before: 0) */
     uint8_t midi_ch, bendr, modd, rsv2;          /* (v0.11.0) MIDI CH 0 OMNI / 1..16, BEND 0..12, MOD 0..2 */
 } p8g_t;
 _Static_assert(sizeof(p8g_t) == 24u, "the global settings' layout (v0.9..v0.10 saved its first 20 bytes)");
@@ -143,6 +143,7 @@ static void p8g_now(p8g_t *g)
     g->ec[0] = ec.delay, g->ec[1] = ec.repeat, g->ec[2] = ec.balance, g->ec[3] = ec.age;
     g->hp_cut = (uint8_t)p8.set[P800_HP_CUT], g->hp_mg = (uint8_t)p8.set[P800_HP_MG];
     g->bpm = (uint8_t)song.g[G_BPM];
+    g->clk_ext = sq_ext;
     g->midi_ch = p8_midi_ch, g->bendr = (uint8_t)p8.set[P800_BENDR], g->modd = (uint8_t)p8.set[P800_MODD];
 }
 
@@ -173,6 +174,7 @@ static uint32_t p8g_boot(void)
     p800_set(P800_HP_MG, g.hp_mg != 0);
     if (g.bpm >= 40u && g.bpm <= 240u)           /* (0: saved before the sequencer, v0.9.x: as it is) */
         song.g[G_BPM] = g.bpm;
+    sq_ext = g.clk_ext == 1u;
     p8g_now(&p8g_saved);
     p8g_saved.slot = g.slot;
     return g.slot % P8S_NSLOT;

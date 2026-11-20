@@ -29,8 +29,9 @@
  * the home screen while it is on. GLO held with another control is as before (tuning, STAGES, banks, restore).
  * The sequencer (seq800.c, step 11): REC starts entering a new sequence (the SEQUENCE page shows it) and, again, ends
  * it (saved); while entering every note or chord played is a step, ARP a TIE, SEQ a REST. Otherwise SEQ opens the
- * SEQUENCE page (and again, home): KNOB 1 its TEMPO (40..240; following MIDI clock it shows EXT). PLAY/STOP starts and
- * stops it (with MIDI clock, the drum machine's start and stop too). REC lit while entering, PLAY while playing.
+ * SEQUENCE page (and again, home): KNOB 1 its TEMPO (40..240), KNOB 2 CLOCK (v0.12.1): INT, PLAY/STOP starts and
+ * stops it; EXT (MIDI clock), PLAY only readies it (WAITING), the drum machine's START and STOP play and stop it, PLAY
+ * again (or playing) stops and un-readies it. REC lit while entering, PLAY while playing.
  * GLO tapped (pressed and let go, nothing else touched): the GLOBAL page (v0.11.0): KNOB 1 MIDI CH (OMNI, 1..16),
  * KNOB 2 BEND (0..12 semitones), KNOB 3 MOD (the wheel: VIB, VCF or BOTH), KNOB 4 TUNE (-50..+50). Tapped again:
  * the HIGH-PASS page (FM1_HP builds), then home.
@@ -384,7 +385,7 @@ static uint32_t u8_sig_bot(void)
                (uint32_t)(p8.set[P800_TUNE] + 50) * 7919u;
     sig += (uint32_t)sq.rec * 8191u + (uint32_t)song.playing * 524287u;
     if (ue.page == PG_SEQ)
-        sig += sq.nsteps * 37u + sq.nnotes * 1031u + (uint32_t)song.g[G_BPM] * 65537u + (uint32_t)song.g[G_CLOCK] * 999983u +
+        sig += sq.nsteps * 37u + sq.nnotes * 1031u + (uint32_t)song.g[G_BPM] * 65537u + (uint32_t)song.g[G_CLOCK] * 999983u + (uint32_t)(sq_ext * 2u + sq_armed) * 7919u +
                (uint32_t)sq.ngrp * 251u + (song.playing ? sq.at * 17u : 0u);
     if (ue.view == UV_CPU)
         sig += u8_cpu_now() * 1000003u + u8_cpu_peak() * 3001u +
@@ -484,17 +485,19 @@ static void u8_draw(void)
             }
             u8_text(10, 206, &AF_S, "BEND IN SEMITONES  TUNE IN CENTS", u8_rgb(150, 120, 170));
         } else if (ue.page == PG_SEQ) {          /* the sequence: entering or playing, TEMPO, steps, notes */
-            static const char *const L[3] = {"TEMPO", "STEPS", "NOTES"};
+            static const char *const L[4] = {"TEMPO", "CLOCK", "STEPS", "NOTES"};
             uint32_t c;
-            const char *st = sq.rec ? "RECORDING" : song.playing ? "PLAYING" : "STOPPED";
+            const char *st = sq.rec ? "RECORDING" : song.playing ? "PLAYING" : sq_ext && sq_armed ? "WAITING" : "STOPPED";
             u8_text(10, 152, &AF_S, "SEQUENCE", u8_rgb(255, 170, 230));
             u8_text(230 - text_w(&AF_M, st), 150, &AF_M, st, sq.rec ? u8_rgb(255, 230, 120) : u8_rgb(120, 240, 255));
-            for (c = 0; c < 3u; c++) {
-                int32_t cx = c == 0u ? 30 : c == 1u ? 110 : 190;
+            for (c = 0; c < 4u; c++) {
+                int32_t cx = 34 + 58 * (int32_t)c;
                 if (c == 0u) {
-                    if (song.g[G_CLOCK]) str_cpy(v, "EXT", sizeof v);
+                    if (sq_ext) str_cpy(v, "-", sizeof v);   /* (the drum machine's) */
                     else fmt_int(v, song.g[G_BPM]);
                 } else if (c == 1u) {
+                    str_cpy(v, sq_ext ? "EXT" : "INT", sizeof v);
+                } else if (c == 2u) {
                     fmt_int(v, sq.nsteps);
                     if (song.playing && !sq.rec && sq.nsteps) {
                         str_cpy(v, "", sizeof v);
@@ -714,10 +717,15 @@ static void u8_input(void)
             sq.rec = 0;
             (void)p8q_save();
         }
-        transport_req = song.playing ? 2u : 1u;
+        if (song.playing)
+            transport_req = 2u, sq_armed = 0;
+        else if (sq_ext)                         /* EXT: ready (or no longer), the drum machine's START plays it */
+            sq_armed = (uint8_t)!sq_armed, u8_say(sq_armed ? "WAITING FOR CLOCK" : "STOPPED");
+        else
+            transport_req = 1u;
     }
-    if (song.g[G_CLOCK] && !song.playing && fm1_ms - sq.ext_ms > 3000u)
-        song.g[G_CLOCK] = 0;                     /* the clock gone 3 s, stopped: its own tempo again */
+    if (!sq_ext && song.g[G_CLOCK])              /* INT: its own tempo (MIDI clock not heard) */
+        song.g[G_CLOCK] = 0;
     if ((pressed >> panel.btn[B_HOME]) & 1u)     /* HOME held: the CPU (its peak from now) */
         U8_MAX_US = 0, ue.view = UV_CPU;
     if (ue.view == UV_CPU && !((fm1_in.buttons >> panel.btn[B_HOME]) & 1u))
@@ -770,12 +778,16 @@ static void u8_input(void)
         }
         (void)panel_enc(EN_SELECT), (void)panel_enc(EN_ALGO);
     } else if (ue.page == PG_SEQ) {              /* the sequence's page: KNOB 1 its TEMPO (its own clock) */
-        if ((s = panel_enc(EN_K1)) != 0 && !song.g[G_CLOCK]) {
+        if ((s = panel_enc(EN_K1)) != 0 && !sq_ext) {
             int32_t b = song.g[G_BPM] + s;
             song.g[G_BPM] = (int16_t)(b < 40 ? 40 : b > 240 ? 240 : b);
         }
+        if ((s = panel_enc(EN_K2)) != 0 && (uint32_t)(s > 0) != sq_ext) {   /* KNOB 2: CLOCK INT / EXT */
+            if (song.playing) transport_req = 2u;
+            sq_ext = (uint8_t)(s > 0), sq_armed = 0;
+        }
         for (k = 0; k < NE; k++)
-            if (k != EN_PRESET && k != EN_K1)
+            if (k != EN_PRESET && k != EN_K1 && k != EN_K2)
                 (void)panel_enc(k);
     } else if (ue.page == PG_HP) {               /* the high-pass's page: SELECT on / off, KNOB 1 CUTOFF, KNOB 2 MG */
         if ((s = panel_enc(EN_SELECT)) != 0)
