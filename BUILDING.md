@@ -1,7 +1,7 @@
 # Building FM1-800 for the M-VAVE FM-1
 
 FM1-800 builds with Felucca's build (below, Felucca's own notes); `tools/build.py` builds the FM1-800 firmware
-(`FM1_800=1`). `FM1_HP=0 ./build.sh` leaves out the high-pass add-on (the public release). Clone this repository,
+(`FM1_800=1`), with the high-pass add-on (`FM1_HP=0 ./build.sh` leaves it out). Clone this repository,
 not Felucca's, with `--recurse-submodules`:
 
 ```
@@ -9,7 +9,7 @@ git clone --recurse-submodules https://github.com/morbious22/FM1-800.git
 ```
 
 The installer site: `python3 web/make_site.py build/felucca.fwsc VERSION SITE_FOLDER`. Don't use `--release`:
-it marks the package as Felucca's (FM-1_9xx), not FM1-800's (FM-1_800).
+it marks the package as Felucca's (FM-1_9xx), not FM1-800's (FM-1_80086).
 
 ## Felucca's notes
 

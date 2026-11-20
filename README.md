@@ -27,6 +27,7 @@ firmware (V15 or V16, from M-VAVE): the programs and sequence saved in FM1-800 m
 | SAVE held while switching on | put all of bank A back to the factory programs |
 | FX | the PHASER page, then the ECHO page, then home. On each, SELECT turns it on / off and KNOB 1..4 set it |
 | GLO (tap) | the GLOBAL page: MIDI channel, pitch bend range, mod wheel (VIB, VCF or BOTH), tuning |
+| GLO (tap again) | the HIGH-PASS page, an extra the Poly-800 never had: SELECT on / off, KNOB 1 CUTOFF, KNOB 2 the MG sweeps it |
 | REC | start a new sequence: each note or chord played is a step, ARP a tie, SEQ a rest; REC again to finish (saved) |
 | SEQ | the SEQUENCE page: KNOB 1 TEMPO, KNOB 2 CLOCK (INT, or EXT to follow MIDI clock) |
 | PLAY/STOP | play the sequence. On EXT it waits for the drum machine's or computer's START |

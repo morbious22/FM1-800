@@ -33,8 +33,8 @@
 #define FELUCCA_UART 1           /* TRS MIDI IN on UART1 / PH8 */
 #endif
 #ifndef FELUCCA_ID
-#define FELUCCA_ID "FM-1_800"    /* package identity (build.py: the .fwsc marker string); FM1-800: its own, not
-                                  * Felucca's FM-1_9xx */
+#define FELUCCA_ID "FM-1_80086"  /* package identity (build.py: the .fwsc marker string); FM1-800: its own (v0.12.5, free on
+                                  * thefirmwarehub.com; before FM-1_800), not Felucca's FM-1_9xx */
 #endif
 #ifndef FELUCCA_CPU2
 #define FELUCCA_CPU2 1           /* 1 (1.6.1): the second core is built in and renders some parts when MENU > SYSTEM >
@@ -49,7 +49,7 @@
 #define FM1_CRASH_CTX_N 1u         /* chip/fm1_irq.h: the registers of the last crash only (80 B of .noinit; four would
                                     * not fit beside the project slots) */
 #ifndef FELUCCA_VERSION
-#define FELUCCA_VERSION "v0.12.4" /* FM1-800's own version (based on Felucca 1.8.2); shown in the menu, the console
+#define FELUCCA_VERSION "v0.12.5" /* FM1-800's own version (based on Felucca 1.8.2); shown in the menu, the console
                                   * and the editor; build.py --release X.Y */
 #endif
 #if FELUCCA_OTA && !FELUCCA_FLASH

@@ -291,3 +291,10 @@ for Felucca's editor backup first (the editor left in v0.12.0, so the backup cou
 stopped there): it warns that FM1-800's programs and sequence may be lost, then installs. `web/make_site.py` no longer
 puts the editor on the site (it removes an old site's `webapp/editor/`) and names the package `fm1-800-VER.fwsc`.
 README.md, CREDITS.md, BUILDING.md and the issue templates are FM1-800's. Felucca's code stays in the tree.
+
+## Its own identity (v0.12.5)
+
+The package identity is `FM-1_80086` (`tools/build.py PRODUCT`, `felucca.c FELUCCA_ID`): free on
+thefirmwarehub.com, which wants a number no other firmware uses (before: `FM-1_800`). The installer accepts the
+update from either (it checks the model, FM-1, then that the device reports the new identity after). The public
+release is built with the high-pass (plain `./build.sh`); the README lists its page.
