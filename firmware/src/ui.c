@@ -1345,7 +1345,7 @@ static void apply_preset_to(track_t *t, uint32_t pi)
 {
     const engine_t *e = ENGINES[t->eng_req % NENGINES];
     uint32_t i;
-#if !FELUCCA_FM4
+#if !FELUCCA_FM4 && !FM1_800                         /* (FM1-800: every engine the Poly-800) */
     if (t->eng_req % NENGINES == ENGI_DIGITAL) {
         fm4_load_preset(t, pi);
         return;
@@ -1383,7 +1383,9 @@ static void apply_preset_to(track_t *t, uint32_t pi)
         for (i = 0; i < 4u; i++)
             t->p[P_DIST + i] = (int16_t)(pr->fx[i] ? pr->fx[i] - 1 : FX_DEF[i]);
     }
+#if !FM1_800
     fm6_track_loaded(t);                              /* FM6: the preset's patch (its SLOT) */
+#endif
     load_end(t);
 }
 
@@ -1393,7 +1395,7 @@ static void set_engine_of(track_t *t, uint32_t ei)
 {
     const engine_t *e = ENGINES[ei % NENGINES];
     uint32_t i;
-#if !FELUCCA_FM4
+#if !FELUCCA_FM4 && !FM1_800
     if (ei % NENGINES == ENGI_DIGITAL) {             /* DIGITAL (retired): its first preset, as FM6 */
         fm4_load_preset(t, 0);
         return;

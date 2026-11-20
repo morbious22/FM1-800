@@ -1222,7 +1222,9 @@ static void persist_boot(void)                    /* before settings_init / pane
                 proj_fetch(i);
     }
 #endif
+#if !FM1_800                                       /* (FM1-800: no Felucca user presets) */
     up_boot();                                     /* user presets */
+#endif
 #endif
 }
 

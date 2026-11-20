@@ -272,3 +272,13 @@ Top right of the home screen, in the sky: Felucca's battery icon and reading (`u
 stock thresholds): empty, 1/4, 3/4 or full (cyan), the last bar and empty red, a green bolt on USB power. It is part
 of the top half's signature, so a change redraws that half. A program name long enough to reach it drops to the small
 face. `ui800_test.c` dumps the four states (`batt_*.ppm`).
+
+## The clear-out, stage 2 (step 9, v0.12.3)
+
+Behaviour unchanged. Every part's power-on engine is the Poly-800 (`engines.c TRK_DEF`), so no other engine's preset
+loads; `ui.c` apply_preset_to / set_engine_of leave out the retired DIGITAL (FM4) path and the FM6 patch load; no
+Felucca user presets at power-on (`project.c up_boot`). FM4's converter, the FM6 patches and the user preset stores
+go: 206 functions / ~27k IR instructions before, 194 / ~25.4k now. Felucca's own screens and menus were already left
+out by stage 1 (nothing reached them once `ui800.c` drew the screen and the editor went). What stays from Felucca is
+what the FM-1-800 uses: the drawing library (the sunset, the text), the panel set-up (a unit's buttons and knobs,
+learned once), the crash screen, the sequencer's transport and MIDI clock, the USB serial console, the update code.
